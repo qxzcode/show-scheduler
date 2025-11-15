@@ -44,11 +44,18 @@ def main():
     print(f"{len(routines) - 1} routines:")
     for routine in sorted(routines.keys(), key=lambda routine: (-len(routines[routine]), routine)):
         print(f"    {routine:<20}  with {len(routines[routine])} dancer(s)")
+    print()
 
     print(f"{len(dancers)} dancers:")
     dancer_routine_counts = {dancer: sum((dancer in dancers) for dancers in routines.values()) for dancer in dancers}
     for dancer in sorted(dancers, key=lambda dancer: (-dancer_routine_counts[dancer], dancer)):
         print(f"    {dancer:<20}  in {dancer_routine_counts[dancer]} routine(s)")
+    print()
+
+    print("Possible duplicate dancer names:")
+    for d1, close_matches in possible_dupes:
+        print(f"    {d1}: {', '.join(close_matches)}")
+    print()
 
     # CP-SAT
 
