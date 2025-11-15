@@ -1,6 +1,9 @@
+import difflib
 import math
+from collections import defaultdict
 
 import pandas as pd
+from ortools.sat.python import cp_model
 
 
 def load_data():
@@ -25,8 +28,6 @@ def load_data():
     }
     routines["[Intermission]"] = []
     dancers = sorted(set(dancer for dancers in routines.values() for dancer in dancers))
-
-    import difflib
 
     possible_dupes: list[tuple[str, list[str]]] = []
     for i, d1 in enumerate(dancers):
@@ -60,10 +61,6 @@ def main():
     # CP-SAT
 
     num_slots = 31 + 1  # +1 for intermission
-
-    from collections import defaultdict
-
-    from ortools.sat.python import cp_model
 
     model = cp_model.CpModel()
 
