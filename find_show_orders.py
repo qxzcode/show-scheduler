@@ -43,14 +43,16 @@ def main():
     routines, dancers, possible_dupes = load_data()
 
     print(f"{len(routines) - 1} routines:")
+    max_routine_name_len = max(len(routine) for routine in routines.keys())
     for routine in sorted(routines.keys(), key=lambda routine: (-len(routines[routine]), routine)):
-        print(f"    {routine:<20}  with {len(routines[routine])} dancer(s)")
+        print(f"    {routine:<{max_routine_name_len}}  with {len(routines[routine])} dancer(s)")
     print()
 
     print(f"{len(dancers)} dancers:")
     dancer_routine_counts = {dancer: sum((dancer in dancers) for dancers in routines.values()) for dancer in dancers}
+    max_dancer_name_len = max(len(dancer) for dancer in dancers)
     for dancer in sorted(dancers, key=lambda dancer: (-dancer_routine_counts[dancer], dancer)):
-        print(f"    {dancer:<20}  in {dancer_routine_counts[dancer]} routine(s)")
+        print(f"    {dancer:<{max_dancer_name_len}}  in {dancer_routine_counts[dancer]} routine(s)")
     print()
 
     print("Possible duplicate dancer names:")
@@ -60,6 +62,7 @@ def main():
 
     # CP-SAT
     print("Setting up CP-SAT model...")
+    print()
 
     num_slots = 31 + 1  # +1 for intermission
 
