@@ -1,7 +1,4 @@
-# %% [markdown]
-# # Data loading and summary statistics
-
-# %%
+# Data loading and summary statistics
 import math
 
 import pandas as pd
@@ -28,7 +25,6 @@ routines: dict[str, list[str]] = {
 routines["[Intermission]"] = []
 dancers = sorted(set(dancer for dancers in routines.values() for dancer in dancers))
 
-# %%
 import difflib
 
 possible_dupes = []
@@ -39,12 +35,10 @@ for i, d1 in enumerate(dancers):
 
 possible_dupes
 
-# %%
 print(f"{len(routines) - 1} routines:")
 for routine in sorted(routines.keys(), key=lambda routine: (-len(routines[routine]), routine)):
     print(f"    {routine:<20}  with {len(routines[routine])} dancer(s)")
 
-# %%
 print(f"{len(dancers)} dancers:")
 dancer_routine_counts = {
     dancer: sum((dancer in dancers) for dancers in routines.values()) for dancer in dancers
@@ -52,13 +46,10 @@ dancer_routine_counts = {
 for dancer in sorted(dancers, key=lambda dancer: (-dancer_routine_counts[dancer], dancer)):
     print(f"    {dancer:<20}  in {dancer_routine_counts[dancer]} routine(s)")
 
-# %% [markdown]
-# # CP-SAT
+# CP-SAT
 
-# %%
 num_slots = 31 + 1  # +1 for intermission
 
-# %%
 from collections import defaultdict
 
 from ortools.sat.python import cp_model
@@ -238,14 +229,12 @@ print(f"OPTIMAL? {is_optimal}")
 print(f"FEASIBLE? {status == cp_model.FEASIBLE}")
 assert is_optimal
 
-# %%
 for i in range(num_slots):
     routines_in_slot = [
         routine for routine in routines.keys() if solver.value(routine_slot_flags[routine][i])
     ]
     print(f"Slot {i:>2}:    {',  '.join(routines_in_slot)}")
 
-# %%
 for dancer, dancer_routines in dancer_wait_times.items():
     wait_times = {
         routine: solver.value(wait_time) for routine, wait_time in dancer_routines.items()
