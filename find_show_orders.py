@@ -145,14 +145,14 @@ def main():
         # Place PT Jazz as the last number of the show.
         model.add(routine_slot_flags["PT Jazz"][-1] == 1)
 
-        # Place senior as the number after intermission.
-        require_precedes("[Intermission]", "Senior")
+        # # Place senior as the number after intermission.
+        # require_precedes("[Intermission]", "Senior")
 
         # Place Alumni Jazz as the number before PT Contemp.
         require_precedes("Alumni Jazz", "PT Contemp")
 
-        # Place Alumni Lyrical as the number before PT Jazz.
-        require_precedes("Alumni Lyrical", "PT Jazz")
+        # # Place Alumni Lyrical as the number before PT Jazz.
+        # require_precedes("Alumni Lyrical", "PT Jazz")
 
     ### Objective ###
 
