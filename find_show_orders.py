@@ -59,6 +59,7 @@ def main():
     print()
 
     # CP-SAT
+    print("Setting up CP-SAT model...")
 
     num_slots = 31 + 1  # +1 for intermission
 
@@ -183,6 +184,9 @@ def main():
     # model.add(num_short_waits <= 3)
 
     model.minimize(num_short_waits * (max_intermission_dist + 1) + intermission_to_middle_distance)
+
+    print("Solving...")
+    print()
 
     class MySolutionCallback(cp_model.CpSolverSolutionCallback):
         def __init__(self):
