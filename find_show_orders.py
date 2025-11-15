@@ -8,7 +8,10 @@ import pandas as pd
 
 data = pd.read_excel("show.xlsx")
 
-from dancer_dupe_map import dancer_dupe_map
+try:
+    from dancer_dupe_map import dancer_dupe_map
+except ImportError:
+    dancer_dupe_map = {}
 
 routine_map = {
     "Column1": "PT Contemp",
