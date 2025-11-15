@@ -1,0 +1,16 @@
+[project]
+name = "show-scheduler"
+version = "0.1.0"
+description = "A tool that helps find good show orders."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "openpyxl>=3.1.5",
+    "ortools>=9.12.4544",
+    "pandas>=2.2.3",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
+]
