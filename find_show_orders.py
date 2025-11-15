@@ -167,12 +167,23 @@ def main():
                 model.add(min_wait_time <= wait_time)
         model.maximize(min_wait_time)
 
-    # Minimize how close the intermission is to the middle.
-    middle_index = num_slots // 2
+    # Minimize the distance between intermission and the middle of the order.
+    def distance_from_middle(index: int) -> int:
+        if num_slots % 2 == 0:
+            # num_slots = 6
+            # 0, 1, 2, 3, 4, 5
+            middle_index = (num_slots - (index < num_slots // 2)) // 2
+        else:
+            # num_slots = 5
+            # 0, 1, 2, 3, 4
+            middle_index = num_slots // 2
+
+        return abs(index - middle_index)
+
     intermission_to_middle_distance = sum(
-        abs(i - middle_index) * routine_slot_flags["[Intermission]"][i] for i in range(num_slots)
+        distance_from_middle(i) * routine_slot_flags["[Intermission]"][i] for i in range(num_slots)
     )
-    max_intermission_dist = max(abs(i - middle_index) for i in range(num_slots))
+    max_intermission_dist = max(distance_from_middle(i) for i in range(num_slots))
     print(f"{max_intermission_dist=}")
     model.minimize(intermission_to_middle_distance)
     # model.add(intermission_to_middle_distance <= 2)
