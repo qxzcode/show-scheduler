@@ -3,9 +3,7 @@ import math
 import pandas as pd
 
 
-def main():
-    # Data loading and summary statistics
-
+def load_data():
     data = pd.read_csv("Showcase Names - Sheet1.csv")
 
     try:
@@ -30,13 +28,18 @@ def main():
 
     import difflib
 
-    possible_dupes = []
+    possible_dupes: list[tuple[str, list[str]]] = []
     for i, d1 in enumerate(dancers):
         close_matches = difflib.get_close_matches(d1, dancers[i + 1 :])
         if close_matches:
             possible_dupes.append((d1, close_matches))
 
-    possible_dupes
+    return routines, dancers, possible_dupes
+
+
+def main():
+    # Data loading and summary statistics
+    routines, dancers, possible_dupes = load_data()
 
     print(f"{len(routines) - 1} routines:")
     for routine in sorted(routines.keys(), key=lambda routine: (-len(routines[routine]), routine)):
