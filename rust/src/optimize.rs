@@ -60,26 +60,27 @@ fn hill_climb_order(problem_info: &ProblemInfo, rng: &mut impl rand::Rng, order:
     let n = problem_info.routines.len();
     order.shuffle(rng);
     let mut best_score = score_order(problem_info, order);
-    let mut improved = true;
-    while improved {
-        improved = false;
+    let mut last_improvement = (n - 1, n - 1);
+    'main_loop: loop {
         for i in 0..n {
             for j in (i + 1)..n {
+                if (i, j) == last_improvement {
+                    break 'main_loop;
+                }
+
                 order.swap(i, j);
                 let current_score = score_order(problem_info, order);
                 if current_score < best_score {
                     best_score = current_score;
                     // println!(
                     //     "Improved score to {:?} by swapping {} and {}",
-                    //     best_score,
-                    //     problem_info.routines[order[i]].name,
-                    //     problem_info.routines[order[j]].name
+                    //     best_score, problem_info.routines[order[i]].name, problem_info.routines[order[j]].name
                     // );
                     if best_score == (0, 0, 0) {
                         println!("Found optimal score!");
                         return best_score;
                     }
-                    improved = true;
+                    last_improvement = (i, j);
                 } else {
                     order.swap(i, j); // revert
                 }
@@ -99,7 +100,7 @@ fn score_order(problem_info: &ProblemInfo, order: &[usize]) -> Score {
     let n = order.len();
     for i in 0..(n - 1) {
         num_dist_1 += problem_info.intersection_count(order[i], order[i + 1]);
-        if i + 2 < n {
+        if i + 2 < n && order[i + 1] != problem_info.intermission_index {
             num_dist_2 += problem_info.intersection_count(order[i], order[i + 2]);
         }
     }
