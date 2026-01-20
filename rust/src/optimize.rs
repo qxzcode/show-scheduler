@@ -12,11 +12,11 @@ struct ProblemInfo<'a> {
 impl<'a> ProblemInfo<'a> {
     pub fn new(routines: &'a [Routine]) -> Self {
         let n = routines.len();
-        let mut intersection_counts = vec![0; n * (n - 1) / 2];
+        let mut intersection_counts = vec![0; n * n];
         for i in 0..n {
-            for j in 0..i {
+            for j in 0..n {
                 let count = routines[i].dancers.intersection(&routines[j].dancers).count();
-                intersection_counts[j + i * n - ((i + 2) * (i + 1)) / 2] = count;
+                intersection_counts[j + i * n] = count;
             }
         }
 
@@ -29,10 +29,9 @@ impl<'a> ProblemInfo<'a> {
 
     pub fn intersection_count(&self, i: usize, j: usize) -> usize {
         let n = self.routines.len();
-        assert!(i != j);
-        assert!(i < n && j < n);
-        let (i, j) = if i > j { (i, j) } else { (j, i) };
-        self.intersection_counts[j + i * n - ((i + 2) * (i + 1)) / 2]
+        debug_assert!(i != j);
+        debug_assert!(i < n && j < n);
+        self.intersection_counts[j + i * n]
     }
 }
 
