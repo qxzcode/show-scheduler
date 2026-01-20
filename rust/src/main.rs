@@ -1,16 +1,18 @@
+pub mod optimize;
+
 use std::{
     cmp::Reverse,
     collections::{HashMap, HashSet},
 };
 
-struct Routine {
-    name: String,
-    dancers: Vec<String>,
+pub struct Routine {
+    pub name: String,
+    pub dancers: HashSet<String>,
 }
 
-struct InputData {
-    routines: Vec<Routine>,
-    dancers: Vec<String>,
+pub struct InputData {
+    pub routines: Vec<Routine>,
+    pub dancers: Vec<String>,
 }
 
 fn load_dancer_dupe_map() -> HashMap<String, String> {
@@ -38,7 +40,7 @@ fn load_data() -> csv::Result<InputData> {
     let mut routines = Vec::new();
     for h in headers.iter() {
         let name = h.trim().to_string();
-        routines.push(Routine { name, dancers: Vec::new() });
+        routines.push(Routine { name, dancers: HashSet::new() });
     }
 
     let dancer_dupe_map = load_dancer_dupe_map();
@@ -50,12 +52,12 @@ fn load_data() -> csv::Result<InputData> {
             if dancer.is_empty() {
                 continue;
             }
-            routines[i].dancers.push(dancer.to_string());
+            routines[i].dancers.insert(dancer.to_string());
         }
     }
 
     // Add intermission as empty routine
-    routines.push(Routine { name: "[Intermission]".to_string(), dancers: Vec::new() });
+    routines.push(Routine { name: "[Intermission]".to_string(), dancers: HashSet::new() });
 
     routines.sort_by_key(|r| (Reverse(r.dancers.len()), r.name.clone()));
 
@@ -82,4 +84,11 @@ fn main() {
         println!("    {:max_name_len$}", d);
     }
     println!();
+
+    let (optimized_order, score) = optimize::optimize_order(&input_data.routines);
+    println!("Optimized routine order:");
+    for &idx in &optimized_order {
+        println!("    {}", input_data.routines[idx].name);
+    }
+    println!("Score: {:?}", score);
 }
