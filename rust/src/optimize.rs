@@ -67,21 +67,18 @@ fn hill_climb_order(problem_info: &ProblemInfo, rng: &mut impl rand::Rng, order:
                     break 'main_loop;
                 }
 
-                order.swap(i, j);
+                order[i..=j].reverse();
                 let current_score = score_order(problem_info, order);
                 if current_score < best_score {
                     best_score = current_score;
-                    // println!(
-                    //     "Improved score to {:?} by swapping {} and {}",
-                    //     best_score, problem_info.routines[order[i]].name, problem_info.routines[order[j]].name
-                    // );
+                    // println!("Improved score to {best_score:?} by reversing from {i} to {j}");
                     if best_score == (0, 0, 0) {
                         println!("Found optimal score!");
                         return best_score;
                     }
                     last_improvement = (i, j);
                 } else {
-                    order.swap(i, j); // revert
+                    order[i..=j].reverse(); // revert
                 }
             }
         }
