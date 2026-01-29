@@ -6,4 +6,6 @@ edition = "2024"
 [dependencies]
 csv = "1.4.0"
 indicatif = "0.18.3"
+petgraph = "0.8.3"
 rand = "0.9.2"
+russcip = { version = "0.9.1", features = ["bundled"] }

@@ -3,7 +3,7 @@ use rand::seq::SliceRandom;
 
 use crate::Routine;
 
-struct ProblemInfo<'a> {
+pub struct ProblemInfo<'a> {
     routines: &'a [Routine],
     intermission_index: usize,
     intersection_counts: Vec<usize>,
@@ -27,9 +27,19 @@ impl<'a> ProblemInfo<'a> {
         }
     }
 
+    /// Returns the ordered list of routines in the problem.
+    pub fn routines(&self) -> &'a [Routine] {
+        self.routines
+    }
+
+    /// Returns the index of the intermission routine (in the list returned by `routines()`).
+    pub fn intermission_index(&self) -> usize {
+        self.intermission_index
+    }
+
+    /// Returns the number of dancers performing in both routine `i` and routine `j`.
     pub fn intersection_count(&self, i: usize, j: usize) -> usize {
         let n = self.routines.len();
-        debug_assert!(i != j);
         debug_assert!(i < n && j < n);
         self.intersection_counts[j + i * n]
     }

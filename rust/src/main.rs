@@ -1,15 +1,18 @@
 pub mod optimize;
+pub mod optimize_complete;
 
 use std::{
     cmp::Reverse,
     collections::{HashMap, HashSet},
 };
 
+#[derive(Clone, Debug)]
 pub struct Routine {
     pub name: String,
     pub dancers: HashSet<String>,
 }
 
+#[derive(Clone, Debug)]
 pub struct InputData {
     pub routines: Vec<Routine>,
     pub dancers: Vec<String>,
