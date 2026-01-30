@@ -151,7 +151,8 @@ pub fn optimize_order(routines: &[Routine]) -> (Vec<usize>, Score) {
 
     let mut tmp_order = best_order.clone();
     for _ in (0..100_000).progress() {
-        let score = hill_climb_order(&problem_info, &mut rng, &mut tmp_order);
+        tmp_order.shuffle(&mut rng);
+        let score = hill_climb_order(&problem_info, &mut tmp_order);
         if score < best_score {
             best_score = score;
             best_order.clone_from(&tmp_order);
@@ -161,9 +162,8 @@ pub fn optimize_order(routines: &[Routine]) -> (Vec<usize>, Score) {
     (best_order, best_score)
 }
 
-fn hill_climb_order(problem_info: &ProblemInfo, rng: &mut impl rand::Rng, order: &mut [usize]) -> Score {
+pub fn hill_climb_order(problem_info: &ProblemInfo, order: &mut [usize]) -> Score {
     let n = problem_info.routines.len();
-    order.shuffle(rng);
     let mut solution = Solution::new(problem_info, order);
     let mut last_improvement = (n - 2, n - 1);
     'main_loop: loop {

@@ -4,20 +4,25 @@ use petgraph::{
     dot::{Config, Dot},
     graph::DiGraph,
 };
-use russcip::{Solution, Variable, prelude::*};
+use russcip::{ModelStageProblemOrSolving, Solution, Variable, prelude::*};
 
-use crate::{Routine, optimize::ProblemInfo};
+use crate::{
+    Routine,
+    optimize::{self, ProblemInfo},
+};
 
 #[derive(Clone)]
 struct Node {
     out_arcs: Vec<Variable>,
 }
 
+const EPS: f64 = 1e-6;
+
 fn successor(nodes: &[Node], node_index: usize, mut get_value: impl FnMut(&Variable) -> f64) -> Option<usize> {
     nodes[node_index].out_arcs.iter().enumerate().find_map(|(j, arc_var)| {
         let value = get_value(arc_var);
         debug_assert!(
-            (value - value.round()).abs() < 1e-6,
+            (value - value.round()).abs() < EPS,
             "solution given to `successor` is expected to be integral, but arc var {node_index}->{j} has value {value}"
         );
         if value > 0.5 { Some(j) } else { None }
@@ -69,7 +74,11 @@ impl Conshdlr for SubtourElimination {
     }
 
     fn enforce(&mut self, mut model: Model<Solving>, _conshdlr: SCIPConshdlr) -> ConshdlrResult {
-        println!("SubtourElimination::enforce (node {})", model.focus_node().number());
+        println!(
+            "SubtourElimination::enforce (node {} @ depth {})",
+            model.focus_node().number(),
+            model.focus_node().depth(),
+        );
 
         let n = self.nodes.len();
         let mut added_constraint = false;
@@ -100,7 +109,7 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
     let start = std::time::Instant::now();
 
     let mut model = Model::default().minimize();
-    // model = model.set_display_verbosity(5);
+    model = model.set_heuristics(ParamSetting::Off);
 
     // Variables: one binary variable for each arc in the complete directed graph.
     let nodes: Rc<[Node]> = (0..n)
@@ -169,6 +178,91 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
     let cons_handler = SubtourElimination { nodes: nodes.clone() };
     model.include_conshdlr("SEC", "Subtour Elimination Constraint", -1, -1, Box::new(cons_handler));
 
+    // A primal heuristic that uses hill climbing to find good solutions very quickly.
+    struct HillClimbHeuristic {
+        problem_info: ProblemInfo,
+        nodes: Rc<[Node]>,
+        pair_vars: HashMap<(usize, usize), Variable>,
+    }
+
+    impl HillClimbHeuristic {
+        fn try_find_solution<S: ModelStageProblemOrSolving>(
+            &self,
+            model: &Model<S>,
+            best_obj_val: Option<f64>,
+        ) -> HeurResult {
+            // println!("HillClimbHeuristic::try_find_solution");
+
+            let n = self.problem_info.routines().len();
+            let end_index = n;
+
+            let mut order = (0..n).collect::<Vec<_>>();
+
+            // TODO: initialize the order better: random? from current LP solution?
+
+            let (d1_cost, d2_cost, _) = optimize::hill_climb_order(&self.problem_info, &mut order);
+            let obj_val = d1_cost + d2_cost;
+
+            let best_obj_val = best_obj_val.unwrap_or(f64::INFINITY);
+            if (obj_val as f64) < best_obj_val {
+                println!("HillClimbHeuristic found solution with obj value: {obj_val}");
+
+                let solution = model.create_orig_sol();
+
+                solution.set_val(&self.nodes[end_index].out_arcs[order[0]], 1.0);
+                for pos in 0..(order.len() - 1) {
+                    let i = order[pos];
+                    let j = order[pos + 1];
+                    solution.set_val(&self.nodes[i].out_arcs[j], 1.0);
+                    if let Some(&k) = order.get(pos + 2)
+                        && let Some(pair_var) = self.pair_vars.get(&pair_key(i, k))
+                        && j != self.problem_info.intermission_index()
+                    {
+                        solution.set_val(pair_var, 1.0);
+                    }
+                }
+                solution.set_val(&self.nodes[order[order.len() - 1]].out_arcs[end_index], 1.0);
+
+                debug_assert_eq!(solution.obj_val(), obj_val as f64);
+                model.add_sol(solution).expect("heuristic solution should be feasible");
+
+                HeurResult::FoundSol
+            } else {
+                HeurResult::NoSolFound
+            }
+        }
+    }
+
+    impl Heuristic for HillClimbHeuristic {
+        fn execute(&mut self, model: Model<Solving>, _timing: HeurTiming, node_inf: bool) -> HeurResult {
+            println!(
+                "HillClimbHeuristic::execute (node {} @ depth {})",
+                model.focus_node().number(),
+                model.focus_node().depth(),
+            );
+
+            // Skip if the node is infeasible.
+            if node_inf {
+                return HeurResult::DidNotRun;
+            }
+
+            let best_obj_val = model.best_sol().map(|sol| sol.obj_val());
+            self.try_find_solution(&model, best_obj_val)
+        }
+    }
+
+    let heuristic =
+        HillClimbHeuristic { problem_info: problem_info.clone(), nodes: nodes.clone(), pair_vars: pair_vars.clone() };
+    heuristic.try_find_solution(&model, None);
+    model.add(
+        heur(heuristic)
+            .name("HillClimbHeuristic")
+            .desc("Hill climbing primal heuristic")
+            .priority(100)
+            .dispchar('H')
+            .timing(HeurTiming::AFTER_LP_LOOP),
+    );
+
     println!("Built model in: {:?}", start.elapsed());
     let start = std::time::Instant::now();
 
@@ -209,7 +303,7 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
         let i3 = order[pos + 2];
         let conflict_count =
             if i2 == problem_info.intermission_index() { 0 } else { problem_info.intersection_count(i1, i3) };
-        println!("  {i1:>2} -> * -> {i3:>2}: {}", conflict_count);
+        println!("  {i1:>2} -> _ -> {i3:>2}: {}", conflict_count);
     }
 
     order
