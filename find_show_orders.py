@@ -112,6 +112,8 @@ def main():
                     for i in range(num_slots):
                         model.add_implication(routine_slot_flags[routine][i], ~routine_slot_flags[other_routine][i])
 
+    # The vast majority of model creation time is spent in this block:
+    print("slow block start")
     for dancer, dancer_routines in dancer_wait_times.items():
         for routine, wait_time in dancer_routines.items():
             for i in range(num_slots):
@@ -127,6 +129,7 @@ def main():
                             routine_slot_flags[other_routine][j],
                             *[~routine_slot_flags["[Intermission]"][k] for k in range(j + 1, i)],
                         )
+    print("slow block end")
 
     def require_precedes(routine1: str, routine2: str):
         for i in range(num_slots - 1):
