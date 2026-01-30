@@ -3,14 +3,15 @@ use rand::seq::SliceRandom;
 
 use crate::Routine;
 
-pub struct ProblemInfo<'a> {
-    routines: &'a [Routine],
+#[derive(Clone)]
+pub struct ProblemInfo {
+    routines: Box<[Routine]>,
     intermission_index: usize,
     intersection_counts: Vec<usize>,
 }
 
-impl<'a> ProblemInfo<'a> {
-    pub fn new(routines: &'a [Routine]) -> Self {
+impl ProblemInfo {
+    pub fn new(routines: &[Routine]) -> Self {
         let n = routines.len();
         let mut intersection_counts = vec![0; n * n];
         for i in 0..n {
@@ -21,15 +22,15 @@ impl<'a> ProblemInfo<'a> {
         }
 
         Self {
-            routines,
+            routines: routines.into(),
             intersection_counts,
             intermission_index: routines.iter().position(|r| r.name == "[Intermission]").unwrap(),
         }
     }
 
     /// Returns the ordered list of routines in the problem.
-    pub fn routines(&self) -> &'a [Routine] {
-        self.routines
+    pub fn routines(&self) -> &[Routine] {
+        self.routines.as_ref()
     }
 
     /// Returns the index of the intermission routine (in the list returned by `routines()`).
@@ -47,7 +48,7 @@ impl<'a> ProblemInfo<'a> {
 
 /// A candidate solution to the problem.
 struct Solution<'a> {
-    problem_info: &'a ProblemInfo<'a>,
+    problem_info: &'a ProblemInfo,
     order: &'a mut [usize],
     intermission_index: usize,
     score: Score,
@@ -55,7 +56,7 @@ struct Solution<'a> {
 
 impl<'a> Solution<'a> {
     /// Creates a new solution initialized with the given `order`.
-    pub fn new(problem_info: &'a ProblemInfo<'a>, order: &'a mut [usize]) -> Self {
+    pub fn new(problem_info: &'a ProblemInfo, order: &'a mut [usize]) -> Self {
         Self {
             intermission_index: order.iter().position(|&idx| idx == problem_info.intermission_index).unwrap(),
             score: score_order(problem_info, order),
