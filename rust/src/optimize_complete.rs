@@ -17,7 +17,7 @@ pub struct Node {
     pub out_arcs: Vec<Variable>,
 }
 
-const EPS: f64 = 1e-6;
+pub const EPS: f64 = 1e-6;
 
 pub fn successor(nodes: &[Node], node_index: usize, mut get_value: impl FnMut(&Variable) -> f64) -> Option<usize> {
     nodes[node_index].out_arcs.iter().enumerate().find_map(|(j, arc_var)| {
@@ -36,6 +36,8 @@ pub fn sort_pair(i1: usize, i3: usize) -> (usize, usize) {
 
 pub const D1_COST_MULTIPLIER: usize = 1_000;
 
+/// Finds an optimal ordering of the given routines.
+/// Returns a vector of routine indices in the optimized order.
 pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
     let n = routines.len() + 1; // +1 for the start/end node
     let end_index = n - 1;
