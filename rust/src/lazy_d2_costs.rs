@@ -1,3 +1,5 @@
+#![allow(unused)] // TODO: Fix this file or delete it.
+
 use std::{cell::RefCell, collections::HashMap, iter, rc::Rc};
 
 use russcip::{Solution, Variable, prelude::*};
