@@ -74,24 +74,30 @@ fn load_data() -> csv::Result<InputData> {
 fn main() {
     let input_data = load_data().expect("Failed to load data");
 
-    println!("{} routines (including intermission):", input_data.routines.len());
-    let max_name_len = input_data.routines.iter().map(|r| r.name.len()).max().unwrap_or(0);
-    for r in &input_data.routines {
-        println!("    {:max_name_len$}  with {} dancer(s)", r.name, r.dancers.len());
+    for _ in 0..1 {
+        let optimized_order = optimize_complete::optimize_order(&input_data.routines);
+        println!("Optimal routine order: {optimized_order:?}");
     }
-    println!();
 
-    println!("{} dancers:", input_data.dancers.len());
-    let max_name_len = input_data.dancers.iter().map(|d| d.len()).max().unwrap_or(0);
-    for d in &input_data.dancers {
-        println!("    {:max_name_len$}", d);
-    }
-    println!();
+    // println!("{} routines (including intermission):", input_data.routines.len());
+    // let max_name_len = input_data.routines.iter().map(|r| r.name.len()).max().unwrap_or(0);
+    // for r in &input_data.routines {
+    //     println!("    {:max_name_len$}  with {} dancer(s)", r.name, r.dancers.len());
+    // }
+    // println!();
 
-    let (optimized_order, score) = optimize::optimize_order(&input_data.routines);
-    println!("Optimized routine order:");
-    for &idx in &optimized_order {
-        println!("    {}", input_data.routines[idx].name);
-    }
-    println!("Score: {:?}", score);
+    // println!("{} dancers:", input_data.dancers.len());
+    // let max_name_len = input_data.dancers.iter().map(|d| d.len()).max().unwrap_or(0);
+    // for d in &input_data.dancers {
+    //     println!("    {:max_name_len$}", d);
+    // }
+    // println!();
+
+    // let (optimized_order, score) = optimize::optimize_order(&input_data.routines);
+    // println!("Optimized routine order:");
+    // println!("{optimized_order:?}");
+    // for &idx in &optimized_order {
+    //     println!("    {}", input_data.routines[idx].name);
+    // }
+    // println!("Score: {:?}", score);
 }

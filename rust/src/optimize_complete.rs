@@ -1,10 +1,13 @@
+use core::f64;
 use std::{cell::RefCell, collections::HashMap, iter, rc::Rc};
 
+use ordered_float::NotNan;
 use petgraph::{
     dot::{Config, Dot},
     graph::DiGraph,
 };
-use russcip::{ModelStageProblemOrSolving, Solution, Variable, prelude::*};
+use rand::seq::SliceRandom;
+use russcip::{ModelStageProblemOrSolving, SolError, Solution, Variable, prelude::*};
 
 use crate::{
     Routine,
@@ -101,6 +104,8 @@ impl Conshdlr for SubtourElimination {
     }
 }
 
+const D1_COST_MULTIPLIER: usize = 1_000;
+
 pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
     let n = routines.len() + 1; // +1 for the start/end node
     let end_index = n - 1;
@@ -109,6 +114,9 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
     let start = std::time::Instant::now();
 
     let mut model = Model::default().minimize();
+
+    // Disable SCIP's default heuristics.
+    // The problem-specific heuristic is much better, to the point that the default heuristics just slow things down.
     model = model.set_heuristics(ParamSetting::Off);
 
     // Variables: one binary variable for each arc in the complete directed graph.
@@ -119,7 +127,7 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
                     let cost = if i == end_index || j == end_index {
                         0.0
                     } else {
-                        problem_info.intersection_count(i, j) as f64
+                        (problem_info.intersection_count(i, j) * D1_COST_MULTIPLIER) as f64
                     };
                     model.add(var().name(&format!("arc_{i}_to_{j}")).bin().obj(cost))
                 })
@@ -138,6 +146,11 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
 
         // Constraint: exactly one incoming arc to each node.
         model.add(cons().expr((0..n).map(|j| (&nodes[j].out_arcs[i], 1.0))).eq(1.0));
+
+        // // Redundant constraint: at most one arc between each pair of nodes.
+        // for j in (i + 1)..n {
+        //     model.add(cons().coef(&nodes[i].out_arcs[j], 1.0).coef(&nodes[j].out_arcs[i], 1.0).le(1.0));
+        // }
     }
 
     // Distance-2 cost variables and constraints.
@@ -149,8 +162,7 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
                 continue;
             }
 
-            let pair_var =
-                model.add(var().name(&format!("d2_pair_({i1},{i3})")).impl_int(0..=1).obj(conflict_count as f64));
+            let pair_var = model.add(var().name(&format!("d2_pair_({i1},{i3})")).bin().obj(conflict_count as f64));
             pair_vars.insert((i1, i3), pair_var.clone());
 
             for i2 in 0..routines.len() {
@@ -178,6 +190,16 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
     let cons_handler = SubtourElimination { nodes: nodes.clone() };
     model.include_conshdlr("SEC", "Subtour Elimination Constraint", -1, -1, Box::new(cons_handler));
 
+    // // Enforce no distance-1 conflicts.
+    // for i in 0..routines.len() {
+    //     for j in (i + 1)..routines.len() {
+    //         if problem_info.intersection_count(i, j) > 0 {
+    //             model.add(cons().coef(&nodes[i].out_arcs[j], 1.0).eq(0.0));
+    //             model.add(cons().coef(&nodes[j].out_arcs[i], 1.0).eq(0.0));
+    //         }
+    //     }
+    // }
+
     // A primal heuristic that uses hill climbing to find good solutions very quickly.
     struct HillClimbHeuristic {
         problem_info: ProblemInfo,
@@ -190,43 +212,55 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
             &self,
             model: &Model<S>,
             best_obj_val: Option<f64>,
+            num_samples: usize,
+            mut sample_seed_order: impl FnMut(&mut [usize]),
         ) -> HeurResult {
             // println!("HillClimbHeuristic::try_find_solution");
 
             let n = self.problem_info.routines().len();
             let end_index = n;
 
-            let mut order = (0..n).collect::<Vec<_>>();
+            let mut best_order = (0..n).collect::<Vec<_>>();
+            let mut best_heur_obj_val = usize::MAX;
+            let mut tmp_order = best_order.clone();
+            for _ in 0..num_samples {
+                sample_seed_order(&mut tmp_order);
 
-            // TODO: initialize the order better: random? from current LP solution?
+                let (d1_cost, d2_cost, _) = optimize::hill_climb_order(&self.problem_info, &mut tmp_order);
+                let obj_val = (d1_cost * D1_COST_MULTIPLIER) + d2_cost;
 
-            let (d1_cost, d2_cost, _) = optimize::hill_climb_order(&self.problem_info, &mut order);
-            let obj_val = d1_cost + d2_cost;
+                if obj_val < best_heur_obj_val {
+                    best_heur_obj_val = obj_val;
+                    best_order.clone_from(&tmp_order);
+                    // println!("New best_heur_obj_val: {best_heur_obj_val:?}");
+                }
+            }
 
             let best_obj_val = best_obj_val.unwrap_or(f64::INFINITY);
-            if (obj_val as f64) < best_obj_val {
-                println!("HillClimbHeuristic found solution with obj value: {obj_val}");
+            if (best_heur_obj_val as f64) < best_obj_val {
+                println!("HillClimbHeuristic found solution with obj value: {best_heur_obj_val}");
 
                 let solution = model.create_orig_sol();
 
-                solution.set_val(&self.nodes[end_index].out_arcs[order[0]], 1.0);
-                for pos in 0..(order.len() - 1) {
-                    let i = order[pos];
-                    let j = order[pos + 1];
+                solution.set_val(&self.nodes[end_index].out_arcs[best_order[0]], 1.0);
+                for pos in 0..(best_order.len() - 1) {
+                    let i = best_order[pos];
+                    let j = best_order[pos + 1];
                     solution.set_val(&self.nodes[i].out_arcs[j], 1.0);
-                    if let Some(&k) = order.get(pos + 2)
+                    if let Some(&k) = best_order.get(pos + 2)
                         && let Some(pair_var) = self.pair_vars.get(&pair_key(i, k))
                         && j != self.problem_info.intermission_index()
                     {
                         solution.set_val(pair_var, 1.0);
                     }
                 }
-                solution.set_val(&self.nodes[order[order.len() - 1]].out_arcs[end_index], 1.0);
+                solution.set_val(&self.nodes[best_order[best_order.len() - 1]].out_arcs[end_index], 1.0);
 
-                debug_assert_eq!(solution.obj_val(), obj_val as f64);
-                model.add_sol(solution).expect("heuristic solution should be feasible");
-
-                HeurResult::FoundSol
+                debug_assert_eq!(solution.obj_val(), best_heur_obj_val as f64);
+                match model.add_sol(solution) {
+                    Ok(()) => HeurResult::FoundSol,
+                    Err(SolError::Infeasible) => HeurResult::NoSolFound,
+                }
             } else {
                 HeurResult::NoSolFound
             }
@@ -235,31 +269,65 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
 
     impl Heuristic for HillClimbHeuristic {
         fn execute(&mut self, model: Model<Solving>, _timing: HeurTiming, node_inf: bool) -> HeurResult {
-            println!(
-                "HillClimbHeuristic::execute (node {} @ depth {})",
-                model.focus_node().number(),
-                model.focus_node().depth(),
-            );
+            // println!(
+            //     "HillClimbHeuristic::execute (node {} @ depth {})",
+            //     model.focus_node().number(),
+            //     model.focus_node().depth(),
+            // );
 
             // Skip if the node is infeasible.
             if node_inf {
                 return HeurResult::DidNotRun;
             }
 
+            // // Debug output of the current fractional solution:
+            // let mut graph = DiGraph::new();
+            // let graph_nodes = (0..self.nodes.len()).map(|i| graph.add_node(i)).collect::<Vec<_>>();
+            // for (i, node) in self.nodes.iter().enumerate() {
+            //     for (j, arc_var) in node.out_arcs.iter().enumerate() {
+            //         let value = model.current_val(arc_var);
+            //         if value > 1e-10 {
+            //             graph.add_edge(graph_nodes[i], graph_nodes[j], format!("{:.2}", value));
+            //         }
+            //     }
+            // }
+            // std::fs::write("debug.dot", format!("{:?}", Dot::with_config(&graph, &[]))).unwrap();
+            // if rand::rng().random_bool(0.5) {
+            //     std::process::exit(0);
+            // }
+
             let best_obj_val = model.best_sol().map(|sol| sol.obj_val());
-            self.try_find_solution(&model, best_obj_val)
+            self.try_find_solution(&model, best_obj_val, 1, |order| {
+                // Generate an order by repeated greedy selection of the next max-value arc in the fractional solution.
+                let mut visited = vec![false; self.nodes.len()];
+                let end_index = self.problem_info.routines().len();
+                let mut node = end_index;
+                for order_item in order.iter_mut() {
+                    visited[node] = true;
+                    let candidates = self.nodes[node].out_arcs.iter().enumerate().filter(|&(i, _)| !visited[i]);
+                    let max = candidates.max_by_key(|&(_, arc_var)| {
+                        NotNan::new(model.current_val(arc_var)).expect("variable values should never be NaN")
+                    });
+                    node = max.unwrap().0;
+                    assert_ne!(node, end_index);
+                    *order_item = node;
+                }
+            })
         }
     }
 
+    // Primal heuristic: hill climbing local search.
     let heuristic =
         HillClimbHeuristic { problem_info: problem_info.clone(), nodes: nodes.clone(), pair_vars: pair_vars.clone() };
-    heuristic.try_find_solution(&model, None);
+    heuristic.try_find_solution(&model, None, 1_000, {
+        // Sample random initial solutions for improvement.
+        let mut rng = rand::rng();
+        move |order| order.shuffle(&mut rng)
+    });
     model.add(
         heur(heuristic)
             .name("HillClimbHeuristic")
             .desc("Hill climbing primal heuristic")
-            .priority(100)
-            .dispchar('H')
             .timing(HeurTiming::AFTER_LP_LOOP),
     );
 
