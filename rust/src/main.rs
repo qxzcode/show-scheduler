@@ -1,3 +1,4 @@
+mod lazy_d2_costs;
 pub mod optimize;
 pub mod optimize_complete;
 

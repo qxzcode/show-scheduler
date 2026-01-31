@@ -1,5 +1,5 @@
 use core::f64;
-use std::{cell::RefCell, collections::HashMap, iter, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use ordered_float::NotNan;
 use petgraph::{
@@ -15,13 +15,13 @@ use crate::{
 };
 
 #[derive(Clone)]
-struct Node {
-    out_arcs: Vec<Variable>,
+pub struct Node {
+    pub out_arcs: Vec<Variable>,
 }
 
 const EPS: f64 = 1e-6;
 
-fn successor(nodes: &[Node], node_index: usize, mut get_value: impl FnMut(&Variable) -> f64) -> Option<usize> {
+pub fn successor(nodes: &[Node], node_index: usize, mut get_value: impl FnMut(&Variable) -> f64) -> Option<usize> {
     nodes[node_index].out_arcs.iter().enumerate().find_map(|(j, arc_var)| {
         let value = get_value(arc_var);
         debug_assert!(
@@ -30,6 +30,10 @@ fn successor(nodes: &[Node], node_index: usize, mut get_value: impl FnMut(&Varia
         );
         if value > 0.5 { Some(j) } else { None }
     })
+}
+
+pub fn sort_pair(i1: usize, i3: usize) -> (usize, usize) {
+    if i1 < i3 { (i1, i3) } else { (i3, i1) }
 }
 
 /// A constraint handler that enforces the TSP subtour elimination constraint.
@@ -190,6 +194,10 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
     let cons_handler = SubtourElimination { nodes: nodes.clone() };
     model.include_conshdlr("SEC", "Subtour Elimination Constraint", -1, -1, Box::new(cons_handler));
 
+    // // Constraint: distance-2 costs.
+    // let cons_handler = crate::lazy_d2_costs::Distance2Costs::new(problem_info.clone(), nodes.clone());
+    // model.include_conshdlr("D2C", "Distance-2 Costs Constraint", -2, -2, Box::new(cons_handler));
+
     // // Enforce no distance-1 conflicts.
     // for i in 0..routines.len() {
     //     for j in (i + 1)..routines.len() {
@@ -248,7 +256,7 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
                     let j = best_order[pos + 1];
                     solution.set_val(&self.nodes[i].out_arcs[j], 1.0);
                     if let Some(&k) = best_order.get(pos + 2)
-                        && let Some(pair_var) = self.pair_vars.get(&pair_key(i, k))
+                        && let Some(pair_var) = self.pair_vars.get(&sort_pair(i, k))
                         && j != self.problem_info.intermission_index()
                     {
                         solution.set_val(pair_var, 1.0);
