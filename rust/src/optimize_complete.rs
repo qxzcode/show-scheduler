@@ -1,14 +1,16 @@
 use core::f64;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{collections::HashMap, rc::Rc};
 
 use petgraph::{
     dot::{Config, Dot},
     graph::DiGraph,
 };
 use rand::seq::SliceRandom;
-use russcip::{Solution, Variable, prelude::*};
+use russcip::{Variable, prelude::*};
 
-use crate::{Routine, local_search::HillClimbHeuristic, optimize::ProblemInfo};
+use crate::{
+    Routine, local_search::HillClimbHeuristic, optimize::ProblemInfo, subtour_elimination::SubtourElimination,
+};
 
 #[derive(Clone)]
 pub struct Node {
@@ -30,78 +32,6 @@ pub fn successor(nodes: &[Node], node_index: usize, mut get_value: impl FnMut(&V
 
 pub fn sort_pair(i1: usize, i3: usize) -> (usize, usize) {
     if i1 < i3 { (i1, i3) } else { (i3, i1) }
-}
-
-/// A constraint handler that enforces the TSP subtour elimination constraint.
-struct SubtourElimination {
-    nodes: Rc<[Node]>,
-}
-
-impl SubtourElimination {
-    fn cycles(&self, mut get_value: impl FnMut(&Variable) -> f64) -> impl Iterator<Item = Vec<usize>> {
-        let n = self.nodes.len();
-        let mut visited = vec![false; n];
-
-        (0..n).filter_map(move |start| {
-            if visited[start] {
-                return None;
-            }
-
-            // Collect the cycle starting from `start`.
-            let mut cycle = vec![];
-            let mut current_node = start;
-            loop {
-                cycle.push(current_node);
-                visited[current_node] = true;
-
-                if let Some(next_node) = successor(&self.nodes, current_node, &mut get_value)
-                    && !visited[next_node]
-                {
-                    current_node = next_node;
-                } else {
-                    break;
-                }
-            }
-
-            Some(cycle)
-        })
-    }
-}
-
-impl Conshdlr for SubtourElimination {
-    fn check(&mut self, _model: Model<Solving>, _conshdlr: SCIPConshdlr, solution: &Solution) -> bool {
-        // println!("SubtourElimination::check");
-
-        let n = self.nodes.len();
-        self.cycles(|var| solution.val(var)).all(|cycle| cycle.len() == n)
-    }
-
-    fn enforce(&mut self, mut model: Model<Solving>, _conshdlr: SCIPConshdlr) -> ConshdlrResult {
-        println!(
-            "SubtourElimination::enforce (node {} @ depth {})",
-            model.focus_node().number(),
-            model.focus_node().depth(),
-        );
-
-        let n = self.nodes.len();
-        let mut added_constraint = false;
-
-        let model = RefCell::new(&mut model);
-        for cycle in self.cycles(|var| model.borrow().current_val(var)) {
-            if cycle.len() < n {
-                // Found a subtour; add a constraint to eliminate it.
-                let nodes = &self.nodes;
-                let constraint = cons()
-                    .expr(cycle.iter().flat_map(|&i| cycle.iter().map(move |&j| (&nodes[i].out_arcs[j], 1.0))))
-                    .le((cycle.len() - 1) as f64);
-                model.borrow_mut().add(constraint);
-                // model.borrow_mut().add_cons_local(&constraint);
-                added_constraint = true;
-            }
-        }
-
-        if added_constraint { ConshdlrResult::ConsAdded } else { ConshdlrResult::Feasible }
-    }
 }
 
 pub const D1_COST_MULTIPLIER: usize = 1_000;
@@ -187,7 +117,7 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
     println!("Added {} distance-2 pair variables.", pair_vars.len());
 
     // Constraint: subtour elimination.
-    let cons_handler = SubtourElimination { nodes: nodes.clone() };
+    let cons_handler = SubtourElimination::new(nodes.clone());
     model.include_conshdlr("SEC", "Subtour Elimination Constraint", -1, -1, Box::new(cons_handler));
 
     // // Constraint: distance-2 costs.

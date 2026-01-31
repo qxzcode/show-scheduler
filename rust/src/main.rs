@@ -1,7 +1,8 @@
 mod lazy_d2_costs;
-pub mod local_search;
+mod local_search;
 pub mod optimize;
 pub mod optimize_complete;
+mod subtour_elimination;
 
 use std::{
     cmp::Reverse,
