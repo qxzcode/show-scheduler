@@ -1,5 +1,8 @@
 use core::f64;
-use std::{collections::HashMap, rc::Rc};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use petgraph::{
     dot::{Config, Dot},
@@ -9,7 +12,10 @@ use rand::seq::SliceRandom;
 use russcip::{Variable, prelude::*};
 
 use crate::{
-    Routine, local_search::HillClimbHeuristic, optimize::ProblemInfo, subtour_elimination::SubtourElimination,
+    Routine,
+    local_search::HillClimbHeuristic,
+    optimize::{MetaRoutine, ProblemInfo},
+    subtour_elimination::SubtourElimination,
 };
 
 #[derive(Clone)]
@@ -38,10 +44,10 @@ pub const D1_COST_MULTIPLIER: usize = 1_000;
 
 /// Finds an optimal ordering of the given routines.
 /// Returns a vector of routine indices in the optimized order.
-pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
-    let n = routines.len() + 1; // +1 for the start/end node
+pub fn optimize_order(routines: &[Routine], num_slots: usize) -> Vec<usize> {
+    let problem_info = ProblemInfo::new(routines, num_slots);
+    let n = problem_info.meta_routines().len() + 1; // +1 for the start/end node
     let end_index = n - 1;
-    let problem_info = ProblemInfo::new(routines);
 
     let start = std::time::Instant::now();
 
@@ -56,7 +62,7 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
         .map(|i| {
             let out_arcs: Vec<Variable> = (0..n)
                 .map(|j| {
-                    let cost = if i == end_index || j == end_index {
+                    let cost = if i == j || i == end_index || j == end_index {
                         0.0
                     } else {
                         (problem_info.intersection_count(i, j) * D1_COST_MULTIPLIER) as f64
@@ -65,12 +71,36 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
                 })
                 .collect();
 
-            // Forbid self-loops.
-            model.add(cons().coef(&out_arcs[i], 1.0).eq(0.0));
-
             Node { out_arcs }
         })
         .collect();
+
+    // Forbid a self-loop on the start/end node.
+    model.add(cons().coef(&nodes[end_index].out_arcs[end_index], 1.0).eq(0.0));
+
+    // Schedule exactly `num_slots` meta-routines in total.
+    // This means the total number of self-loops selected (i.e. meta-routines not scheduled) must be `meta_routines.len() - num_slots`.
+    model.add(
+        cons()
+            .expr((0..(n - 1)).map(|i| (&nodes[i].out_arcs[i], 1.0)))
+            .eq((problem_info.meta_routines().len() - num_slots) as f64),
+    );
+
+    // Each routine must be scheduled exactly once.
+    for r in 0..routines.len() {
+        // A meta-routine is scheduled iff its self-loop arc is NOT selected.
+        // Exactly one of the meta-routines containing routine `r` must be scheduled.
+        let mut constraint = cons();
+        let mut rhs = 1.0;
+        for (i, mr) in problem_info.meta_routines().iter().enumerate() {
+            if mr.contains_routine(r) {
+                // Add (1 - loop_arc) to the LHS of the constraint.
+                constraint = constraint.coef(&nodes[i].out_arcs[i], -1.0);
+                rhs -= 1.0;
+            }
+        }
+        model.add(constraint.eq(rhs));
+    }
 
     for i in 0..n {
         // Constraint: exactly one outgoing arc from each node.
@@ -79,16 +109,16 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
         // Constraint: exactly one incoming arc to each node.
         model.add(cons().expr((0..n).map(|j| (&nodes[j].out_arcs[i], 1.0))).eq(1.0));
 
-        // // Redundant constraint: at most one arc between each pair of nodes.
-        // for j in (i + 1)..n {
-        //     model.add(cons().coef(&nodes[i].out_arcs[j], 1.0).coef(&nodes[j].out_arcs[i], 1.0).le(1.0));
-        // }
+        // Redundant constraint: at most one arc between each pair of nodes.
+        for j in (i + 1)..n {
+            model.add(cons().coef(&nodes[i].out_arcs[j], 1.0).coef(&nodes[j].out_arcs[i], 1.0).le(1.0));
+        }
     }
 
     // Distance-2 cost variables and constraints.
     let mut pair_vars = HashMap::new();
-    for i1 in 0..routines.len() {
-        for i3 in (i1 + 1)..routines.len() {
+    for i1 in 0..problem_info.meta_routines().len() {
+        for i3 in (i1 + 1)..problem_info.meta_routines().len() {
             let conflict_count = problem_info.intersection_count(i1, i3);
             if conflict_count == 0 {
                 continue;
@@ -97,7 +127,7 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
             let pair_var = model.add(var().name(&format!("d2_pair_({i1},{i3})")).bin().obj(conflict_count as f64));
             pair_vars.insert((i1, i3), pair_var.clone());
 
-            for i2 in 0..routines.len() {
+            for i2 in 0..problem_info.meta_routines().len() {
                 if i2 == i1 || i2 == i3 || i2 == problem_info.intermission_index() {
                     continue;
                 }
@@ -119,7 +149,7 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
     println!("Added {} distance-2 pair variables.", pair_vars.len());
 
     // Constraint: subtour elimination.
-    let cons_handler = SubtourElimination::new(nodes.clone());
+    let cons_handler = SubtourElimination::new(nodes.clone(), num_slots + 1);
     model.include_conshdlr("SEC", "Subtour Elimination Constraint", -1, -1, Box::new(cons_handler));
 
     // // Constraint: distance-2 costs.
@@ -173,7 +203,7 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
     }
     std::fs::write("debug.dot", format!("{:?}", Dot::with_config(&graph, &[Config::EdgeNoLabel]))).unwrap();
 
-    let mut order = Vec::with_capacity(n);
+    let mut order = Vec::with_capacity(num_slots);
     let mut current_node = end_index;
     loop {
         current_node = successor(&nodes, current_node, |var| solution.val(var)).unwrap();
@@ -182,7 +212,7 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
         }
         order.push(current_node);
     }
-    assert_eq!(order.len(), routines.len());
+    assert_eq!(order.len(), num_slots);
 
     for pos in 0..(order.len() - 2) {
         let i1 = order[pos];
@@ -192,6 +222,41 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
             if i2 == problem_info.intermission_index() { 0 } else { problem_info.intersection_count(i1, i3) };
         println!("  {i1:>2} -> _ -> {i3:>2}: {}", conflict_count);
     }
+
+    println!();
+    for pos in 0..order.len() {
+        let mr = &problem_info.meta_routines()[order[pos]];
+        print!("    Slot {:>2}:  ", pos + 1);
+        match mr {
+            MetaRoutine::Single(r) => {
+                println!("{}", routines[*r].name);
+            }
+            MetaRoutine::Double(r1, r2) => {
+                println!("{},  {}", routines[*r1].name, routines[*r2].name);
+            }
+        }
+
+        // Show conflicts, if any.
+        let dancers0: HashSet<_> = mr.dancers(routines).collect();
+        if let Some(mr1) = order.get(pos + 1) {
+            let dancers1: HashSet<_> = problem_info.meta_routines()[*mr1].dancers(routines).collect();
+            if !dancers0.is_disjoint(&dancers1) {
+                let conflicts: Vec<_> = dancers0.intersection(&dancers1).collect();
+                println!("        distance-1 conflicts ({}):  {conflicts:?}", conflicts.len());
+            }
+
+            if *mr1 != problem_info.intermission_index()
+                && let Some(mr2) = order.get(pos + 2)
+            {
+                let dancers2: HashSet<_> = problem_info.meta_routines()[*mr2].dancers(routines).collect();
+                if !dancers0.is_disjoint(&dancers2) {
+                    let conflicts: Vec<_> = dancers0.intersection(&dancers2).collect();
+                    println!("        distance-2 conflicts ({}):  {conflicts:?}", conflicts.len());
+                }
+            }
+        }
+    }
+    println!();
 
     order
 }

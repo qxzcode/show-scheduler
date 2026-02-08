@@ -1,31 +1,97 @@
+use std::collections::HashSet;
+
 use indicatif::ProgressIterator;
 use rand::seq::SliceRandom;
 
 use crate::Routine;
 
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum MetaRoutine {
+    Single(usize),
+    Double(usize, usize),
+}
+
+impl MetaRoutine {
+    /// Returns an iterator over all the dancers performing in this meta-routine.
+    pub fn dancers<'a>(&self, routines: &'a [Routine]) -> impl Iterator<Item = &'a String> {
+        let (d1, d2) = match self {
+            MetaRoutine::Single(i) => (&routines[*i].dancers, None),
+            MetaRoutine::Double(i, j) => (&routines[*i].dancers, Some(&routines[*j].dancers)),
+        };
+
+        debug_assert!(d2.is_none_or(|d2| d1.is_disjoint(d2)));
+
+        // Just chaining is valid because d1 and d2 are disjoint.
+        d1.iter().chain(d2.into_iter().flatten())
+    }
+
+    /// Returns whether this meta-routine contains the routine with the given index.
+    pub fn contains_routine(&self, routine_index: usize) -> bool {
+        match self {
+            MetaRoutine::Single(i) => *i == routine_index,
+            MetaRoutine::Double(i, j) => *i == routine_index || *j == routine_index,
+        }
+    }
+}
+
+/// Pre-processed information about a particular problem instance.
+#[derive(Clone, Debug)]
 pub struct ProblemInfo {
+    num_slots: usize,
     routines: Box<[Routine]>,
+    meta_routines: Box<[MetaRoutine]>,
     intermission_index: usize,
     intersection_counts: Vec<usize>,
 }
 
 impl ProblemInfo {
-    pub fn new(routines: &[Routine]) -> Self {
-        let n = routines.len();
+    pub fn new(routines: &[Routine], num_slots: usize) -> Self {
+        let mut meta_routines = Vec::new();
+        meta_routines.extend((0..routines.len()).map(MetaRoutine::Single)); // All single routines.
+        for i in 0..routines.len() {
+            for j in (i + 1)..routines.len() {
+                // Only allow "doubling-up" pairs of routines that:
+                //  - Don't have any dancers in common.
+                //  - Are individually eligible to be doubled up.
+                if routines[i].dancers.is_disjoint(&routines[j].dancers)
+                    && routines[i].is_doubleable()
+                    && routines[j].is_doubleable()
+                {
+                    meta_routines.push(MetaRoutine::Double(i, j));
+                }
+            }
+        }
+        println!("Problem has {} routines and {} meta-routines.", routines.len(), meta_routines.len());
+
+        let n = meta_routines.len();
         let mut intersection_counts = vec![0; n * n];
         for i in 0..n {
+            let dancers_i: HashSet<_> = meta_routines[i].dancers(routines).collect();
             for j in 0..n {
-                let count = routines[i].dancers.intersection(&routines[j].dancers).count();
+                let dancers_j: HashSet<_> = meta_routines[j].dancers(routines).collect();
+                let count = dancers_i.intersection(&dancers_j).count();
                 intersection_counts[j + i * n] = count;
             }
         }
 
+        let intermission_routine_index = routines.iter().position(|r| r.name == "[Intermission]").unwrap();
+        let intermission_index = meta_routines
+            .iter()
+            .position(|mr| matches!(mr, MetaRoutine::Single(i) if *i == intermission_routine_index))
+            .unwrap();
+
         Self {
+            num_slots,
             routines: routines.into(),
+            meta_routines: meta_routines.into(),
             intersection_counts,
-            intermission_index: routines.iter().position(|r| r.name == "[Intermission]").unwrap(),
+            intermission_index,
         }
+    }
+
+    /// Returns the number of time slots that the routines must be scheduled into (including the intermission).
+    pub fn num_slots(&self) -> usize {
+        self.num_slots
     }
 
     /// Returns the ordered list of routines in the problem.
@@ -33,14 +99,19 @@ impl ProblemInfo {
         self.routines.as_ref()
     }
 
-    /// Returns the index of the intermission routine (in the list returned by `routines()`).
+    /// Returns the ordered list of meta-routines in the problem.
+    pub fn meta_routines(&self) -> &[MetaRoutine] {
+        self.meta_routines.as_ref()
+    }
+
+    /// Returns the index of the intermission meta-routine (in the list returned by `meta_routines()`).
     pub fn intermission_index(&self) -> usize {
         self.intermission_index
     }
 
-    /// Returns the number of dancers performing in both routine `i` and routine `j`.
+    /// Returns the number of dancers performing in both meta-routine `i` and meta-routine `j`.
     pub fn intersection_count(&self, i: usize, j: usize) -> usize {
-        let n = self.routines.len();
+        let n = self.meta_routines.len();
         debug_assert!(i < n && j < n);
         self.intersection_counts[j + i * n]
     }
@@ -144,7 +215,7 @@ impl<'a> Solution<'a> {
 pub fn optimize_order(routines: &[Routine]) -> (Vec<usize>, Score) {
     let n = routines.len();
     let mut rng = rand::rng();
-    let problem_info = ProblemInfo::new(routines);
+    let problem_info = ProblemInfo::new(routines, n);
 
     let mut best_order = (0..n).collect::<Vec<_>>();
     let mut best_score = score_order(&problem_info, &best_order);

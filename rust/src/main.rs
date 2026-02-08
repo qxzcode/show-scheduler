@@ -15,6 +15,14 @@ pub struct Routine {
     pub dancers: HashSet<String>,
 }
 
+impl Routine {
+    /// Returns whether this routine is eligible to be doubled up with another routine in the same time slot.
+    /// This is true if and only if the routine has exactly 1 or 2 dancers.
+    pub fn is_doubleable(&self) -> bool {
+        (1..=2).contains(&self.dancers.len())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct InputData {
     pub routines: Vec<Routine>,
@@ -78,17 +86,12 @@ fn load_data() -> csv::Result<InputData> {
 fn main() {
     let input_data = load_data().expect("Failed to load data");
 
-    for _ in 0..1 {
-        let optimized_order = optimize_complete::optimize_order(&input_data.routines);
-        println!("Optimal routine order: {optimized_order:?}");
+    println!("{} routines (including intermission):", input_data.routines.len());
+    let max_name_len = input_data.routines.iter().map(|r| r.name.len()).max().unwrap_or(0);
+    for r in &input_data.routines {
+        println!("    {:max_name_len$}  with {} dancer(s)", r.name, r.dancers.len());
     }
-
-    // println!("{} routines (including intermission):", input_data.routines.len());
-    // let max_name_len = input_data.routines.iter().map(|r| r.name.len()).max().unwrap_or(0);
-    // for r in &input_data.routines {
-    //     println!("    {:max_name_len$}  with {} dancer(s)", r.name, r.dancers.len());
-    // }
-    // println!();
+    println!();
 
     // println!("{} dancers:", input_data.dancers.len());
     // let max_name_len = input_data.dancers.iter().map(|d| d.len()).max().unwrap_or(0);
@@ -96,6 +99,13 @@ fn main() {
     //     println!("    {:max_name_len$}", d);
     // }
     // println!();
+
+    let num_slots = 31 + 1; // +1 for intermission
+    for _ in 0..1 {
+        let optimized_order = optimize_complete::optimize_order(&input_data.routines, num_slots);
+        // TODO: the above function needs to return a list of meta-routine indices, not routine indices
+        println!("Optimal routine order: {optimized_order:?}");
+    }
 
     // let (optimized_order, score) = optimize::optimize_order(&input_data.routines);
     // println!("Optimized routine order:");
