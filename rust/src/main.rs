@@ -63,6 +63,7 @@ fn load_data() -> csv::Result<InputData> {
     }
 
     // Add intermission as empty routine
+    // routines.truncate(15);
     routines.push(Routine { name: "[Intermission]".to_string(), dancers: HashSet::new() });
 
     routines.sort_by_key(|r| (Reverse(r.dancers.len()), r.name.clone()));

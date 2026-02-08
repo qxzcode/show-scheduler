@@ -136,19 +136,19 @@ pub fn optimize_order(routines: &[Routine]) -> Vec<usize> {
     //     }
     // }
 
-    // Primal heuristic: hill climbing local search.
-    let heuristic = HillClimbHeuristic::new(problem_info.clone(), nodes.clone(), pair_vars.clone());
-    heuristic.try_find_solution(&model, None, 1_000, {
-        // Sample random initial solutions for improvement.
-        let mut rng = rand::rng();
-        move |order| order.shuffle(&mut rng)
-    });
-    model.add(
-        heur(heuristic)
-            .name("HillClimbHeuristic")
-            .desc("Hill climbing primal heuristic")
-            .timing(HeurTiming::AFTER_LP_LOOP),
-    );
+    // // Primal heuristic: hill climbing local search.
+    // let heuristic = HillClimbHeuristic::new(problem_info.clone(), nodes.clone(), pair_vars.clone());
+    // heuristic.try_find_solution(&model, None, 1_000, {
+    //     // Sample random initial solutions for improvement.
+    //     let mut rng = rand::rng();
+    //     move |order| order.shuffle(&mut rng)
+    // });
+    // model.add(
+    //     heur(heuristic)
+    //         .name("HillClimbHeuristic")
+    //         .desc("Hill climbing primal heuristic")
+    //         .timing(HeurTiming::AFTER_LP_LOOP),
+    // );
 
     println!("Built model in: {:?}", start.elapsed());
     let start = std::time::Instant::now();
