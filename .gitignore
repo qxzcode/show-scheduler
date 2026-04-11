@@ -1,6 +1,7 @@
 node_modules/
 src/lib/wasm/
-/dist/
+/dist
+/.prerender/
 
 # OS
 .DS_Store

@@ -13,7 +13,8 @@
         score: [number, number, number];
     }
 
-    const wasmInit = init();
+    // Guard against SSR context — WASM can't be fetched in Node.
+    const wasmInit = typeof window !== 'undefined' ? init() : Promise.resolve();
 
     let csvInput = $state('');
     let numSlots = $state(32);
@@ -98,9 +99,11 @@
             </thead>
             <tbody>
                 {#each slots as slot}
-                    {@const isIntermission = slot.routines.length === 1 && slot.routines[0] === '[Intermission]'}
-                    {@const hasConflict = slot.dist1_conflicts.length > 0 || slot.dist2_conflicts.length > 0}
-                    <tr class:intermission={isIntermission} class:has-conflict={hasConflict}>
+                    {@const rowClass = [
+                        slot.routines.length === 1 && slot.routines[0] === '[Intermission]' ? 'intermission' : '',
+                        slot.dist1_conflicts.length > 0 || slot.dist2_conflicts.length > 0 ? 'has-conflict' : '',
+                    ].filter(Boolean).join(' ')}
+                    <tr class={rowClass}>
                         <td>{slot.slot_number}</td>
                         <td>{slot.routines.join(' + ')}</td>
                         <td><span class="conflict-names">{slot.dist1_conflicts.join(', ')}</span></td>
@@ -196,7 +199,7 @@
         font-style: italic;
     }
 
-    :global(.has-conflict td) {
+    .has-conflict td {
         background: #fff0f0 !important;
     }
 
