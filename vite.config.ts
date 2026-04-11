@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import { fileURLToPath } from 'url';
 
 export default defineConfig({
+    base: process.env.BASE_PATH ?? '/',
     plugins: [svelte()],
     publicDir: 'static',
     resolve: {
