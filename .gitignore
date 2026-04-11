@@ -1,13 +1,6 @@
-node_modules
-src/lib/wasm
-
-# Output
-.output
-.vercel
-.netlify
-.wrangler
-/.svelte-kit
-/build
+node_modules/
+src/lib/wasm/
+/dist/
 
 # OS
 .DS_Store

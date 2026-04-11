@@ -1,5 +1,5 @@
 <script lang="ts">
-    import init, { parse_csv, optimize } from '$lib/wasm/show_scheduler.js';
+    import init, { optimize, parse_csv } from '$lib/wasm/show_scheduler.js';
 
     interface SlotResult {
         slot_number: number;
@@ -55,10 +55,6 @@
         }
     }
 </script>
-
-<svelte:head>
-    <title>Show Scheduler</title>
-</svelte:head>
 
 <main>
     <h1>Show Scheduler</h1>
