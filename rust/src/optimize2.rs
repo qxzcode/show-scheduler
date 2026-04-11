@@ -140,8 +140,9 @@ pub fn optimize_order_streaming<F: FnMut(&[usize], Score)>(
     let mut randomizer = Randomizer::new(&problem_info, rand::rng());
 
     let mut solution = Solution::new(&problem_info, &mut randomizer);
+    // Hill-climb the initial random solution before reporting anything.
+    let mut best_score = hill_climb_order(&problem_info, &mut solution);
     let mut best_order = solution.order.clone();
-    let mut best_score = solution.score;
     on_improvement(&best_order, best_score);
 
     if best_score == (0, 0, 0) {

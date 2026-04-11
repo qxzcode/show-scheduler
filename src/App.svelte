@@ -1,5 +1,8 @@
 <script lang="ts">
     import OptimizerWorker from "$lib/optimizer.worker.ts?worker";
+    import Sidebar from "$lib/Sidebar.svelte";
+    import PerformersTab from "$lib/PerformersTab.svelte";
+    import ScheduleTab from "$lib/ScheduleTab.svelte";
 
     interface SlotResult {
         slot_number: number;
@@ -13,17 +16,197 @@
         score: [number, number, number];
     }
 
-    let csvInput = $state("");
-    let numSlots = $state(32);
-    let status = $state("");
-    let score = $state("");
-    let slots = $state<SlotResult[]>([]);
-    let running = $state(false);
-    let dragOver = $state(false);
+    // ── File / input state ────────────────────────────────────────────────────
+    let csvText = $state("");
     let fileName = $state("");
+    let numSlots = $state(32);
+    let dragOver = $state(false);
 
+    // ── Alias map: alias → canonical ─────────────────────────────────────────
+    let aliasMap = $state(new Map<string, string>());
+    let dismissedSuggestions = $state(new Set<string>());
+
+    // ── Optimizer state ───────────────────────────────────────────────────────
+    let slots = $state<SlotResult[]>([]);
+    let score = $state("");
+    let status = $state("");
+    let error = $state("");
+    let running = $state(false);
+    let hasStarted = $state(false); // triggered at least once
     let worker: Worker | null = null;
 
+    // ── Tab state ─────────────────────────────────────────────────────────────
+    type Tab = "performers" | "schedule";
+    let activeTab = $state<Tab>("performers");
+    let scheduleHasNewResult = $state(false);
+
+    // ── Name normalization ────────────────────────────────────────────────────
+    /**
+     * Canonical form for a name: trim, collapse whitespace, and normalize
+     * punctuation variants (curly quotes → straight, fancy dashes → hyphen).
+     */
+    function normalizeName(s: string): string {
+        return s
+            .trim()
+            .replace(/\s+/g, " ")
+            .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035`]/g, "'") // single-quote variants
+            .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')   // double-quote variants
+            .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015]/g, "-");  // dash variants
+    }
+
+    // ── Derived: performer → routines map (normalized via aliasMap) ───────────
+    let performerRoutines = $derived(buildPerformerRoutines(csvText, aliasMap));
+
+    function buildPerformerRoutines(csv: string, aliases: Map<string, string>): Map<string, Set<string>> {
+        const map = new Map<string, Set<string>>();
+        if (!csv.trim()) return map;
+        const lines = csv.trim().split(/\r?\n/);
+        const header = lines[0]?.split(",").map(normalizeName) ?? [];
+        for (let col = 0; col < header.length; col++) {
+            const routineName = header[col];
+            if (!routineName || routineName === "[Intermission]") continue;
+            for (let row = 1; row < lines.length; row++) {
+                const cells = lines[row].split(",");
+                const raw = normalizeName(cells[col] ?? "");
+                if (!raw) continue;
+                const canonical = aliases.get(raw) ?? raw;
+                if (!map.has(canonical)) map.set(canonical, new Set());
+                map.get(canonical)!.add(routineName);
+            }
+        }
+        return map;
+    }
+
+    // ── Normalized CSV: normalize names, then replace aliases with canonicals ──
+    let normalizedCsv = $derived(normalizeCsv(csvText, aliasMap));
+
+    function normalizeCsv(csv: string, aliases: Map<string, string>): string {
+        if (!csv.trim()) return csv;
+        return csv
+            .trim()
+            .split(/\r?\n/)
+            .map((line, i) => {
+                return line
+                    .split(",")
+                    .map((cell, col) => {
+                        const name = normalizeName(cell);
+                        if (i === 0) return name; // header: just normalize
+                        return aliases.get(name) ?? name; // body: normalize then alias-replace
+                    })
+                    .join(",");
+            })
+            .join("\n");
+    }
+
+    // ── Auto-restart optimizer when inputs change ─────────────────────────────
+    $effect(() => {
+        const csv = normalizedCsv;
+        const ns = numSlots;
+        if (!csv.trim()) {
+            worker?.terminate();
+            worker = null;
+            running = false;
+            hasStarted = false;
+            slots = [];
+            score = "";
+            status = "";
+            return;
+        }
+        startOptimizer(csv, ns);
+    });
+
+    function startOptimizer(csv: string, ns: number) {
+        worker?.terminate();
+
+        running = true;
+        hasStarted = true;
+        status = "Optimizing…";
+        slots = [];
+        score = "";
+        error = "";
+
+        worker = new OptimizerWorker();
+
+        worker.onmessage = (e: MessageEvent) => {
+            if (e.data.type === "progress") {
+                const result: OptimizeResult = JSON.parse(e.data.resultJson);
+                const [d1, d2, mid] = result.score;
+                score = `d1: ${d1}, d2: ${d2}, mid: ${mid}`;
+                slots = result.slots;
+                status = "Optimizing…";
+                if (activeTab !== "schedule") scheduleHasNewResult = true;
+            } else if (e.data.type === "done") {
+                running = false;
+                status = "Done.";
+                worker = null;
+            } else if (e.data.type === "error") {
+                running = false;
+                status = "Error.";
+                error = e.data.message;
+                activeTab = "schedule";
+                worker = null;
+            }
+        };
+
+        worker.onerror = (e) => {
+            running = false;
+            status = "Error.";
+            error = e.message ?? "Unknown worker error.";
+            activeTab = "schedule";
+            worker = null;
+        };
+
+        worker.postMessage({ csvText: csv.trim(), numSlots: ns });
+    }
+
+    // ── Obvious auto-merges ───────────────────────────────────────────────────
+    /**
+     * Scan all names in the CSV for groups that differ only in case and/or
+     * punctuation (e.g. "O'Neal" vs "Oneal", "ABBY" vs "Abby").
+     * Returns an alias map seeding those groups with the name that has
+     * the most capital letters as canonical (ties: longer name wins).
+     */
+    function computeAutoMerges(csv: string): Map<string, string> {
+        const result = new Map<string, string>();
+        if (!csv.trim()) return result;
+
+        const lines = csv.trim().split(/\r?\n/);
+        const allNames = new Set<string>();
+
+        for (const line of lines) {
+            for (const cell of line.split(",")) {
+                const name = normalizeName(cell);
+                if (name) allNames.add(name);
+            }
+        }
+
+        // Group names by lowercase + punctuation-stripped form
+        const groups = new Map<string, string[]>();
+        for (const name of allNames) {
+            const key = name.toLowerCase().replace(/[^a-z0-9 ]/g, "");
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)!.push(name);
+        }
+
+        for (const group of groups.values()) {
+            if (group.length <= 1) continue;
+            // Canonical = most capital letters; tie-break: longest; tie-break: lexically first
+            const canonical = group.reduce((best, name) => {
+                const bc = (best.match(/[A-Z]/g) ?? []).length;
+                const nc = (name.match(/[A-Z]/g) ?? []).length;
+                if (nc !== bc) return nc > bc ? name : best;
+                if (name.length !== best.length) return name.length > best.length ? name : best;
+                return name < best ? name : best;
+            });
+            for (const name of group) {
+                if (name !== canonical) result.set(name, canonical);
+            }
+        }
+
+        return result;
+    }
+
+    // ── File loading ──────────────────────────────────────────────────────────
     function loadFile(file: File) {
         if (
             !file.name.endsWith(".csv") &&
@@ -35,322 +218,214 @@
         }
         const reader = new FileReader();
         reader.onload = (e) => {
-            csvInput = (e.target?.result as string) ?? "";
+            const csv = (e.target?.result as string) ?? "";
+            csvText = csv;
             fileName = file.name;
-            status = "";
+            aliasMap = computeAutoMerges(csv);
+            dismissedSuggestions = new Set();
+            scheduleHasNewResult = false;
+            error = "";
+            activeTab = "performers";
         };
         reader.readAsText(file);
     }
 
-    function onFileInput(e: Event) {
-        const file = (e.target as HTMLInputElement).files?.[0];
-        if (file) loadFile(file);
-    }
-
-    function onDrop(e: DragEvent) {
-        e.preventDefault();
-        dragOver = false;
-        const file = e.dataTransfer?.files?.[0];
-        if (file) loadFile(file);
-    }
-
-    function run() {
-        if (!csvInput.trim()) {
-            status = "Please select a CSV first.";
-            return;
-        }
-
-        worker?.terminate();
-
-        running = true;
-        status = "Optimizing…";
-        score = "";
-        slots = [];
-
-        worker = new OptimizerWorker();
-
-        worker.onmessage = (e: MessageEvent) => {
-            if (e.data.type === "progress") {
-                const result: OptimizeResult = JSON.parse(e.data.resultJson);
-                const [d1, d2, mid] = result.score;
-                score = `Score — distance-1 conflicts: ${d1}, distance-2 conflicts: ${d2}, intermission offset from middle: ${mid}`;
-                slots = result.slots;
-                status = "Optimizing…";
-            } else if (e.data.type === "done") {
-                running = false;
-                status = "Done.";
-                worker = null;
-            } else if (e.data.type === "error") {
-                running = false;
-                status = `Error: ${e.data.message}`;
-                worker = null;
-            }
-        };
-
-        worker.onerror = (e) => {
-            running = false;
-            status = `Worker error: ${e.message}`;
-            worker = null;
-        };
-
-        worker.postMessage({ csvText: csvInput.trim(), numSlots });
+    function handleAliasMapChange(newMap: Map<string, string>) {
+        aliasMap = newMap;
     }
 </script>
 
-<main>
-    <h1>Show Scheduler</h1>
+<div class="app-shell">
+    <Sidebar
+        {fileName}
+        bind:numSlots
+        {status}
+        {score}
+        {running}
+        {dragOver}
+        onFile={loadFile}
+        onDragOver={() => dragOver = true}
+        onDragLeave={() => dragOver = false}
+    />
 
-    <div class="form-row">
-        <label for="csv-file-input"
-            >Routine CSV (header = routine names, rows = dancer names per
-            column):</label
-        >
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-            class={[
-                "drop-zone",
-                dragOver ? "drag-over" : "",
-                csvInput ? "has-file" : "",
-            ]
-                .filter(Boolean)
-                .join(" ")}
-            role="button"
-            tabindex="0"
-            ondragover={(e) => {
-                e.preventDefault();
-                dragOver = true;
-            }}
-            ondragleave={() => {
-                dragOver = false;
-            }}
-            ondrop={onDrop}
-            onclick={() => document.getElementById("csv-file-input")?.click()}
-            onkeydown={(e) =>
-                e.key === "Enter" || e.key === " "
-                    ? document.getElementById("csv-file-input")?.click()
-                    : null}
-        >
-            {#if csvInput}
-                <span class="file-name">{fileName || "CSV loaded"}</span>
-                <span class="file-hint">Click or drop to replace</span>
-            {:else}
-                <span class="drop-prompt"
-                    >Drop CSV file here or <span class="browse-link"
-                        >browse</span
-                    ></span
+    <div class="main-area">
+        {#if csvText}
+            <nav class="tab-bar">
+                <button
+                    class={["tab-btn", activeTab === "performers" && "active"].filter(Boolean).join(" ")}
+                    onclick={() => activeTab = "performers"}
                 >
-            {/if}
-        </div>
-        <input
-            id="csv-file-input"
-            type="file"
-            accept=".csv,text/csv,text/plain"
-            style="display:none"
-            onchange={onFileInput}
-        />
+                    Performers
+                </button>
+                <button
+                    class={["tab-btn", activeTab === "schedule" && "active"].filter(Boolean).join(" ")}
+                    onclick={() => { activeTab = "schedule"; scheduleHasNewResult = false; }}
+                >
+                    Optimized Schedule
+                    {#if scheduleHasNewResult}
+                        <span class="tab-badge"></span>
+                    {:else if running && slots.length > 0}
+                        <span class="tab-pulse"></span>
+                    {/if}
+                </button>
+            </nav>
+
+            <div class="tab-content">
+                <div class="tab-panel" class:tab-hidden={activeTab !== "performers"}>
+                    <PerformersTab
+                        {performerRoutines}
+                        {aliasMap}
+                        {dismissedSuggestions}
+                        onAliasMapChange={handleAliasMapChange}
+                        onDismissedChange={(s) => dismissedSuggestions = s}
+                        onGoToSchedule={() => { activeTab = "schedule"; scheduleHasNewResult = false; }}
+                    />
+                </div>
+                <div class="tab-panel" class:tab-hidden={activeTab !== "schedule"}>
+                    <ScheduleTab {slots} {hasStarted} {error} />
+                </div>
+            </div>
+        {:else}
+            <div class="no-file">
+                <p class="no-file-prompt">Select a CSV to get started.</p>
+                <p class="no-file-privacy">No data leaves your device – everything runs locally in your browser.</p>
+            </div>
+        {/if}
     </div>
-
-    <div class="form-row">
-        <label for="num-slots"
-            >Number of show slots (including intermission):</label
-        >
-        <input type="number" id="num-slots" min="1" bind:value={numSlots} />
-    </div>
-
-    <button disabled={running} onclick={run}>Optimize</button>
-
-    {#if status}
-        <p class="status">{status}</p>
-    {/if}
-
-    {#if score}
-        <p class="score">{score}</p>
-    {/if}
-
-    {#if slots.length > 0}
-        <table>
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Routine(s)</th>
-                    <th>Distance-1 conflicts</th>
-                    <th>Distance-2 conflicts</th>
-                </tr>
-            </thead>
-            <tbody>
-                {#each slots as slot}
-                    <tr
-                        class={[
-                            slot.routines.length === 1 &&
-                            slot.routines[0] === "[Intermission]"
-                                ? "intermission"
-                                : "",
-                            slot.dist1_conflicts.length > 0 ||
-                            slot.dist2_conflicts.length > 0
-                                ? "has-conflict"
-                                : "",
-                        ]
-                            .filter(Boolean)
-                            .join(" ")}
-                    >
-                        <td>{slot.slot_number}</td>
-                        <td>{slot.routines.join(" + ")}</td>
-                        <td
-                            ><span class="conflict-names"
-                                >{slot.dist1_conflicts.join(", ")}</span
-                            ></td
-                        >
-                        <td
-                            ><span class="conflict-names"
-                                >{slot.dist2_conflicts.join(", ")}</span
-                            ></td
-                        >
-                    </tr>
-                {/each}
-            </tbody>
-        </table>
-    {/if}
-</main>
+</div>
 
 <style>
-    main {
-        font-family: sans-serif;
-        max-width: 900px;
-        margin: 2rem auto;
-        padding: 0 1rem;
+    .app-shell {
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
     }
 
-    h1 {
-        margin-bottom: 1.5rem;
+    .main-area {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: var(--color-bg);
     }
 
-    .form-row {
-        margin-bottom: 1rem;
+    .tab-bar {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid var(--color-border);
+        background: var(--color-panel);
+        flex-shrink: 0;
     }
 
-    label {
-        display: block;
-        font-weight: bold;
-        margin-bottom: 0.25rem;
-    }
-
-    .drop-zone {
-        width: 100%;
-        box-sizing: border-box;
-        border: 2px dashed #aaa;
-        border-radius: 6px;
-        padding: 2rem 1rem;
-        text-align: center;
-        cursor: pointer;
-        color: #555;
-        transition:
-            border-color 0.15s,
-            background 0.15s;
-        user-select: none;
-    }
-
-    .drop-zone:hover,
-    .drop-zone:focus {
-        border-color: #1a6fc4;
-        outline: none;
-    }
-
-    .drop-zone.drag-over {
-        border-color: #1a6fc4;
-        background: #eef4fd;
-    }
-
-    .drop-zone.has-file {
-        border-style: solid;
-        border-color: #1a6fc4;
-        background: #f5f9ff;
-    }
-
-    .drop-prompt {
-        font-size: 0.95rem;
-    }
-
-    .browse-link {
-        color: #1a6fc4;
-        text-decoration: underline;
-    }
-
-    .file-name {
-        display: block;
-        font-family: monospace;
-        font-size: 0.95rem;
-        font-weight: bold;
-        color: #1a6fc4;
-    }
-
-    .file-hint {
-        display: block;
-        font-size: 0.8rem;
-        color: #888;
-        margin-top: 0.25rem;
-    }
-
-    input[type="number"] {
-        width: 8rem;
-        padding: 0.25rem;
-    }
-
-    button {
-        padding: 0.5rem 1.5rem;
-        background: #1a6fc4;
-        color: #fff;
+    .tab-btn {
+        position: relative;
+        padding: 0.75rem 1.25rem;
+        background: none;
         border: none;
-        border-radius: 4px;
+        border-bottom: 2px solid transparent;
+        color: var(--color-text-muted);
+        font-size: 0.875rem;
+        font-weight: 500;
         cursor: pointer;
+        transition: color 0.15s, border-color 0.15s;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .tab-btn:hover {
+        color: var(--color-text);
+    }
+
+    .tab-btn.active {
+        color: var(--color-accent-light);
+        border-bottom-color: var(--color-accent);
+    }
+
+    .tab-pulse {
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 50%;
+        background: var(--color-accent);
+        animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    .tab-badge {
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 50%;
+        background: var(--color-success);
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.4; transform: scale(0.7); }
+    }
+
+    .tab-content {
+        flex: 1;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .tab-panel {
+        position: absolute;
+        inset: 0;
+        overflow-y: auto;
+    }
+
+    .tab-hidden {
+        visibility: hidden;
+        pointer-events: none;
+    }
+
+    .no-file {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+        padding: 2rem;
+        text-align: center;
+    }
+
+    .no-file-prompt {
+        margin: 0;
+        color: var(--color-text-faint);
         font-size: 1rem;
-    }
-
-    button:disabled {
-        background: #888;
-        cursor: default;
-    }
-
-    .status {
-        font-style: italic;
-        color: #555;
-    }
-
-    .score {
-        font-weight: bold;
-    }
-
-    table {
-        border-collapse: collapse;
-        width: 100%;
-        margin-top: 1rem;
-    }
-
-    th,
-    td {
-        border: 1px solid #ccc;
-        padding: 0.4rem 0.7rem;
-        text-align: left;
-    }
-
-    th {
-        background: #f0f0f0;
-    }
-
-    tr:nth-child(even) {
-        background: #fafafa;
-    }
-
-    .intermission {
-        background: #fffbe6 !important;
         font-style: italic;
     }
 
-    .has-conflict td {
-        background: #fff0f0 !important;
-    }
-
-    .conflict-names {
+    .no-file-privacy {
+        margin: 0;
+        color: var(--color-text-faint);
         font-size: 0.8rem;
-        color: #c00;
+        max-width: 26rem;
+        line-height: 1.5;
+    }
+
+    /* ── Responsive: stack sidebar on small screens ────────────────────────── */
+    @media (max-width: 40rem) {
+        .app-shell {
+            flex-direction: column;
+            height: auto;
+            min-height: 100vh;
+        }
+
+        :global(.sidebar) {
+            width: 100% !important;
+            min-width: 0 !important;
+            border-right: none;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .main-area {
+            height: auto;
+        }
+
+        .tab-content {
+            overflow: visible;
+        }
     }
 </style>
