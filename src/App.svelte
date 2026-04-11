@@ -99,11 +99,10 @@
             </thead>
             <tbody>
                 {#each slots as slot}
-                    {@const rowClass = [
+                    <tr class={[
                         slot.routines.length === 1 && slot.routines[0] === '[Intermission]' ? 'intermission' : '',
                         slot.dist1_conflicts.length > 0 || slot.dist2_conflicts.length > 0 ? 'has-conflict' : '',
-                    ].filter(Boolean).join(' ')}
-                    <tr class={rowClass}>
+                    ].filter(Boolean).join(' ')}>
                         <td>{slot.slot_number}</td>
                         <td>{slot.routines.join(' + ')}</td>
                         <td><span class="conflict-names">{slot.dist1_conflicts.join(', ')}</span></td>
