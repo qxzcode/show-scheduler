@@ -30,7 +30,7 @@ jobs:
       - name: Build WASM
         run: wasm-pack build --target web --out-dir web/pkg
 
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: web/
 
