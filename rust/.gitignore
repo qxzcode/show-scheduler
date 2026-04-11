@@ -1,1 +1,6 @@
 /target/
+
+# Debug/profiling artifacts
+debug.dot
+debug.svg
+profile.json.gz
