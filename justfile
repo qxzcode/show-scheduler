@@ -4,5 +4,5 @@ _default:
 build:
     wasm-pack build --target web --out-dir web/pkg
 
-serve: build
-    python3 -m http.server --directory web
+dev:
+    bun run dev --open
