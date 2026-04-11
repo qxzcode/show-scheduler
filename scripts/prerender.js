@@ -20,7 +20,7 @@ const { js } = compile(source, {
     generate: 'server',
     runes: true,
     filename: 'src/App.svelte',
-    css: 'injected',
+    css: 'external',
 });
 
 // Strip import/export statements — we provide dependencies as function params.
