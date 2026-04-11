@@ -96,7 +96,7 @@ pub fn optimize(routines_json: &str, num_slots: usize, num_iterations: u32) -> R
 /// - `num_slots`: total number of time slots (including intermission).
 /// - `callback`: called with a JSON result string (`{ slots, score }`) on each improvement.
 ///
-/// Stops automatically after 5 seconds with no improvement (or immediately on a perfect score).
+/// Stops automatically if a certain amount of time passes with no improvement (or immediately on a perfect score).
 #[wasm_bindgen]
 pub fn optimize_streaming(routines_json: &str, num_slots: usize, callback: &js_sys::Function) -> Result<(), String> {
     let routines: Vec<Routine> = serde_json::from_str(routines_json).map_err(|e| e.to_string())?;

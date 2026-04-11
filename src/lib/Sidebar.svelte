@@ -2,6 +2,8 @@
     interface Props {
         fileName: string;
         numSlots: number;
+        minSlots: number;
+        maxSlots: number;
         status: string;
         score: string;
         running: boolean;
@@ -15,6 +17,8 @@
     let {
         fileName,
         numSlots = $bindable(),
+        minSlots,
+        maxSlots,
         status,
         score,
         running,
@@ -69,8 +73,26 @@
     </section>
 
     <section class="sidebar-section">
-        <label class="field-label" for="num-slots">Show slots (incl. intermission)</label>
-        <input class="number-input" type="number" id="num-slots" min="1" bind:value={numSlots} />
+        <label class="field-label" for="num-slots">
+            Show slots (incl. intermission)
+            {#if fileName}<span class="slot-value">{numSlots}</span>{/if}
+        </label>
+        <input
+            class="slot-slider"
+            type="range"
+            id="num-slots"
+            min={minSlots}
+            max={maxSlots}
+            step="1"
+            disabled={!fileName}
+            bind:value={numSlots}
+        />
+        {#if fileName}
+            <div class="slider-bounds">
+                <span>{minSlots}</span>
+                <span>{maxSlots}</span>
+            </div>
+        {/if}
     </section>
 
     {#if status}
@@ -194,19 +216,32 @@
         text-decoration: underline;
     }
 
-    .number-input {
-        width: 100%;
-        padding: 0.4rem 0.5rem;
-        background: var(--color-surface);
-        border: 1px solid var(--color-border);
-        border-radius: var(--border-radius-sm);
-        color: var(--color-text);
-        font-size: 0.9rem;
+    .slot-value {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: var(--color-accent-light);
+        margin-left: 0.4rem;
+        text-transform: none;
+        letter-spacing: 0;
     }
 
-    .number-input:focus {
-        outline: none;
-        border-color: var(--color-accent);
+    .slot-slider {
+        width: 100%;
+        cursor: pointer;
+        accent-color: var(--color-accent);
+    }
+
+    .slot-slider:disabled {
+        opacity: 0.35;
+        cursor: default;
+    }
+
+    .slider-bounds {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.7rem;
+        color: var(--color-text-faint);
+        margin-top: 0.1rem;
     }
 
     .status-text {

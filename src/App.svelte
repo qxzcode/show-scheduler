@@ -99,6 +99,36 @@
     // ── Normalized CSV: normalize names, then replace aliases with canonicals ──
     let normalizedCsv = $derived(normalizeCsv(csvText, aliasMap));
 
+    // ── Slot range: min/max valid show slots based on doubleable routines ─────
+    let slotRange = $derived(computeSlotRange(normalizedCsv));
+
+    function computeSlotRange(csv: string): { min: number; max: number } {
+        if (!csv.trim()) return { min: 1, max: 100 };
+        const lines = csv.trim().split(/\r?\n/);
+        const header = lines[0]?.split(",").map(s => s.trim()) ?? [];
+        // +1 for the [Intermission] automatically appended by parse_csv
+        const totalRoutines = header.filter(Boolean).length + 1;
+        let doubleableCount = 0;
+        for (let col = 0; col < header.length; col++) {
+            if (!header[col]) continue;
+            let dancerCount = 0;
+            for (let row = 1; row < lines.length; row++) {
+                const cell = lines[row].split(",")[col]?.trim();
+                if (cell) dancerCount++;
+            }
+            if (dancerCount >= 1 && dancerCount <= 2) doubleableCount++;
+        }
+        const min = totalRoutines - Math.floor(doubleableCount / 2);
+        return { min, max: totalRoutines };
+    }
+
+    // Clamp numSlots to valid range whenever the range changes
+    $effect(() => {
+        const { min, max } = slotRange;
+        if (numSlots < min) numSlots = min;
+        else if (numSlots > max) numSlots = max;
+    });
+
     function normalizeCsv(csv: string, aliases: Map<string, string>): string {
         if (!csv.trim()) return csv;
         return csv
@@ -287,6 +317,8 @@
                 <Sidebar
                     {fileName}
                     bind:numSlots
+                    minSlots={slotRange.min}
+                    maxSlots={slotRange.max}
                     {status}
                     {score}
                     {running}
@@ -321,6 +353,8 @@
         <Sidebar
             {fileName}
             bind:numSlots
+            minSlots={slotRange.min}
+            maxSlots={slotRange.max}
             {status}
             {score}
             {running}
