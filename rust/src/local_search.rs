@@ -4,7 +4,7 @@ use ordered_float::NotNan;
 use russcip::{ModelStageProblemOrSolving, SolError, Variable, prelude::*};
 
 use crate::{
-    optimize::{self, ProblemInfo},
+    optimize::{self, MetaRoutine, ProblemInfo},
     optimize_complete::{D1_COST_MULTIPLIER, Node, sort_pair},
 };
 
@@ -13,11 +13,17 @@ pub struct HillClimbHeuristic {
     problem_info: ProblemInfo,
     nodes: Rc<[Node]>,
     pair_vars: HashMap<(usize, usize), Variable>,
+    intermission_middle_distance: Variable,
 }
 
 impl HillClimbHeuristic {
-    pub fn new(problem_info: ProblemInfo, nodes: Rc<[Node]>, pair_vars: HashMap<(usize, usize), Variable>) -> Self {
-        Self { problem_info, nodes, pair_vars }
+    pub fn new(
+        problem_info: ProblemInfo,
+        nodes: Rc<[Node]>,
+        pair_vars: HashMap<(usize, usize), Variable>,
+        intermission_middle_distance: Variable,
+    ) -> Self {
+        Self { problem_info, nodes, pair_vars, intermission_middle_distance }
     }
 
     pub fn try_find_solution<S: ModelStageProblemOrSolving>(
@@ -54,24 +60,82 @@ impl HillClimbHeuristic {
 
             let solution = model.create_orig_sol();
 
+            // DEBUG: make a simple, random feasible solution.
+            let end_index = self.problem_info.meta_routines().len();
+
+            // let routines = self.problem_info.routines();
+            // let mut best_order = Vec::new();
+            // best_order.push((routines.len() - 1, None)); // intermission
+            // for i in 0..(self.problem_info.num_slots() - 1) {
+            //     best_order.push((i, None));
+            // }
+            // dbg!(self.problem_info.num_slots());
+            // dbg!(routines.len());
+            // for i in (self.problem_info.num_slots() - 1)..(routines.len() - 1) {
+            //     assert!(routines[i].is_doubleable());
+            //     best_order.iter_mut().find(|(j, k)| routines[*j].is_doubleable() && k.is_none()).unwrap().1 = Some(i);
+            // }
+            // let best_order: Vec<usize> = best_order
+            //     .into_iter()
+            //     .map(|(i, j)| {
+            //         let mr = if let Some(j) = j { MetaRoutine::Double(i, j) } else { MetaRoutine::Single(i) };
+            //         self.problem_info.meta_routines().iter().position(|&x| x == mr).unwrap()
+            //     })
+            //     .collect();
+            #[rustfmt::skip]
+            // let best_order = [0, 32, 19, 10, 15, 1, 31, 8, 24, 7, 17, 30, 12, 20, 29, 13, 23, 22, 9, 26, 11, 28, 3, 4, 6, 5, 2, 34, 21, 16, 18, 14];
+            // let best_order = [0, 32, 13, 19, 30, 14, 16, 18, 21, 27, 2, 12, 22, 29, 1, 23, 8, 25, 17, 20, 28, 11, 7, 15, 6, 5, 3, 4, 9, 24, 43, 10];
+            // let best_order = [2, 12, 22, 20, 17, 25, 31, 14, 26, 30, 9, 21, 4, 3, 5, 6, 45, 23, 1, 8, 28, 11, 7, 15, 10, 24, 18, 16, 13, 19, 32, 0];
+               let best_order = [0, 30, 32, 1, 29, 27, 7, 10, 15, 24, 9, 4, 21, 2, 3, 6, 5, 23, 8, 11, 25, 43, 13, 22, 18, 14, 16, 19, 28, 17, 20, 12];
+            // #[rustfmt::skip]
+            //    let best_order = [0, 15, 6, 9, 14, 11, 13, 12, 1, 5, 4, 2, 3, 8, 10, 7];
+
+            assert_eq!(best_order.len(), self.problem_info.num_slots());
+
             solution.set_val(&self.nodes[end_index].out_arcs[best_order[0]], 1.0);
+            let mut is_before_intermission = true;
             for pos in 0..(best_order.len() - 1) {
                 let i = best_order[pos];
                 let j = best_order[pos + 1];
                 solution.set_val(&self.nodes[i].out_arcs[j], 1.0);
+
+                if i == self.problem_info.intermission_index() {
+                    is_before_intermission = false;
+
+                    // Set the intermission middle distance variable.
+                    let n = best_order.len();
+                    let dist = usize::max(((n - 1) / 2).saturating_sub(pos), pos.saturating_sub(n / 2));
+                    solution.set_val(&self.intermission_middle_distance, dist as f64);
+                }
+                solution.set_val(&self.nodes[i].is_before_intermission, if is_before_intermission { 1.0 } else { 0.0 });
+
                 if let Some(&k) = best_order.get(pos + 2)
-                    && let Some(pair_var) = self.pair_vars.get(&sort_pair(i, k))
                     && j != self.problem_info.intermission_index()
                 {
-                    solution.set_val(pair_var, 1.0);
+                    // Set any distance-2 pair variables.
+                    for ir in self.problem_info.meta_routines()[i].routine_indices() {
+                        for kr in self.problem_info.meta_routines()[k].routine_indices() {
+                            if let Some(pair_var) = self.pair_vars.get(&sort_pair(ir, kr)) {
+                                solution.set_val(pair_var, 1.0);
+                            }
+                        }
+                    }
                 }
             }
             solution.set_val(&self.nodes[best_order[best_order.len() - 1]].out_arcs[end_index], 1.0);
 
-            debug_assert_eq!(solution.obj_val(), best_heur_obj_val as f64);
+            // Set self-loop arcs to 1 for unvisited nodes.
+            for i in 0..self.problem_info.meta_routines().len() {
+                if !best_order.contains(&i) {
+                    solution.set_val(&self.nodes[i].out_arcs[i], 1.0);
+                }
+            }
+
+            // debug_assert_eq!(solution.obj_val(), best_heur_obj_val as f64);
             match model.add_sol(solution) {
                 Ok(()) => HeurResult::FoundSol,
-                Err(SolError::Infeasible) => HeurResult::NoSolFound,
+                Err(SolError::Infeasible) => panic!("solution from HillClimbHeuristic was rejected as infeasible"),
+                // Err(SolError::Infeasible) => HeurResult::NoSolFound,
             }
         } else {
             HeurResult::NoSolFound

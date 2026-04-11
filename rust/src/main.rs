@@ -72,8 +72,11 @@ fn load_data() -> csv::Result<InputData> {
         }
     }
 
-    // Add intermission as empty routine
+    // use rand::seq::SliceRandom;
+    // routines.shuffle(&mut rand::rng());
     // routines.truncate(15);
+
+    // Add intermission as empty routine
     routines.push(Routine { name: "[Intermission]".to_string(), dancers: HashSet::new() });
 
     routines.sort_by_key(|r| (Reverse(r.dancers.len()), r.name.clone()));
@@ -103,6 +106,7 @@ fn main() {
     // println!();
 
     let num_slots = 31 + 1; // +1 for intermission
+    // let num_slots = 13 + 1; // +1 for intermission
     // for _ in 0..1 {
     //     let optimized_order = optimize_complete::optimize_order(&input_data.routines, num_slots);
     //     // TODO: the above function needs to return a list of meta-routine indices, not routine indices
