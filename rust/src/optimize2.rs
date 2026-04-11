@@ -126,6 +126,51 @@ pub fn optimize_order(routines: &[Routine], num_slots: usize, num_iterations: u3
     (best_order, best_score)
 }
 
+/// Runs iterations indefinitely, calling `on_improvement` each time a better solution is found.
+/// Stops when no improvement has been found for `NO_IMPROVEMENT_TIMEOUT_MS` milliseconds,
+/// or immediately when the optimal score `(0, 0, 0)` is reached.
+pub fn optimize_order_streaming<F: FnMut(&[usize], Score)>(
+    routines: &[Routine],
+    num_slots: usize,
+    mut on_improvement: F,
+) {
+    const NO_IMPROVEMENT_TIMEOUT_MS: f64 = 5_000.0;
+
+    let problem_info = ProblemInfo::new(routines, num_slots);
+    let mut randomizer = Randomizer::new(&problem_info, rand::rng());
+
+    let mut solution = Solution::new(&problem_info, &mut randomizer);
+    let mut best_order = solution.order.clone();
+    let mut best_score = solution.score;
+    on_improvement(&best_order, best_score);
+
+    if best_score == (0, 0, 0) {
+        return;
+    }
+
+    let mut last_improvement_ms = js_sys::Date::now();
+
+    loop {
+        solution.randomize(&mut randomizer);
+        let score = hill_climb_order(&problem_info, &mut solution);
+
+        if score < best_score {
+            best_score = score;
+            best_order.clone_from(&solution.order);
+            on_improvement(&best_order, best_score);
+            last_improvement_ms = js_sys::Date::now();
+
+            if best_score == (0, 0, 0) {
+                break;
+            }
+        }
+
+        if js_sys::Date::now() - last_improvement_ms > NO_IMPROVEMENT_TIMEOUT_MS {
+            break;
+        }
+    }
+}
+
 fn hill_climb_order(problem_info: &ProblemInfo, solution: &mut Solution) -> Score {
     let n = problem_info.num_slots();
     let mut last_improvement = (n - 2, n - 1);

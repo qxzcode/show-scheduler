@@ -1,5 +1,5 @@
 <script lang="ts">
-    import init, { optimize, parse_csv } from "$lib/wasm/show_scheduler.js";
+    import OptimizerWorker from "$lib/optimizer.worker.ts?worker";
 
     interface SlotResult {
         slot_number: number;
@@ -13,18 +13,16 @@
         score: [number, number, number];
     }
 
-    // Guard against SSR context — WASM can't be fetched in Node.
-    const wasmInit = typeof window !== "undefined" ? init() : Promise.resolve();
-
     let csvInput = $state("");
     let numSlots = $state(32);
-    let numIter = $state(500);
     let status = $state("");
     let score = $state("");
     let slots = $state<SlotResult[]>([]);
     let running = $state(false);
     let dragOver = $state(false);
     let fileName = $state("");
+
+    let worker: Worker | null = null;
 
     function loadFile(file: File) {
         if (
@@ -56,36 +54,46 @@
         if (file) loadFile(file);
     }
 
-    async function run() {
+    function run() {
         if (!csvInput.trim()) {
             status = "Please select a CSV first.";
             return;
         }
 
+        worker?.terminate();
+
         running = true;
-        status = `Running ${numIter} iterations… (browser may be unresponsive for a moment)`;
+        status = "Optimizing…";
         score = "";
         slots = [];
 
-        await wasmInit;
+        worker = new OptimizerWorker();
 
-        // Defer so the status message renders before WASM blocks the thread.
-        await new Promise((r) => setTimeout(r, 0));
+        worker.onmessage = (e: MessageEvent) => {
+            if (e.data.type === "progress") {
+                const result: OptimizeResult = JSON.parse(e.data.resultJson);
+                const [d1, d2, mid] = result.score;
+                score = `Score — distance-1 conflicts: ${d1}, distance-2 conflicts: ${d2}, intermission offset from middle: ${mid}`;
+                slots = result.slots;
+                status = "Optimizing…";
+            } else if (e.data.type === "done") {
+                running = false;
+                status = "Done.";
+                worker = null;
+            } else if (e.data.type === "error") {
+                running = false;
+                status = `Error: ${e.data.message}`;
+                worker = null;
+            }
+        };
 
-        try {
-            const routinesJson = parse_csv(csvInput.trim());
-            const resultJson = optimize(routinesJson, numSlots, numIter);
-            const result: OptimizeResult = JSON.parse(resultJson);
-
-            const [d1, d2, mid] = result.score;
-            score = `Score — distance-1 conflicts: ${d1}, distance-2 conflicts: ${d2}, intermission offset from middle: ${mid}`;
-            slots = result.slots;
-            status = "Done.";
-        } catch (err) {
-            status = `Error: ${err}`;
-        } finally {
+        worker.onerror = (e) => {
             running = false;
-        }
+            status = `Worker error: ${e.message}`;
+            worker = null;
+        };
+
+        worker.postMessage({ csvText: csvInput.trim(), numSlots });
     }
 </script>
 
@@ -147,11 +155,6 @@
             >Number of show slots (including intermission):</label
         >
         <input type="number" id="num-slots" min="1" bind:value={numSlots} />
-    </div>
-
-    <div class="form-row">
-        <label for="num-iter">Optimizer iterations:</label>
-        <input type="number" id="num-iter" min="1" bind:value={numIter} />
     </div>
 
     <button disabled={running} onclick={run}>Optimize</button>
