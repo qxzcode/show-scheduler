@@ -35,8 +35,26 @@
     let hasStarted = $state(false); // triggered at least once
     let worker: Worker | null = null;
 
+    // ── Responsive layout ─────────────────────────────────────────────────────
+    let isMobile = $state(false);
+
+    $effect(() => {
+        const mq = window.matchMedia("(max-width: 40rem)");
+        isMobile = mq.matches;
+        if (mq.matches) activeTab = "setup";
+        const handler = (e: MediaQueryListEvent) => {
+            isMobile = e.matches;
+            if (e.matches && activeTab !== "performers" && activeTab !== "schedule") {
+                activeTab = "setup";
+            }
+            if (!e.matches && activeTab === "setup") activeTab = "performers";
+        };
+        mq.addEventListener("change", handler);
+        return () => mq.removeEventListener("change", handler);
+    });
+
     // ── Tab state ─────────────────────────────────────────────────────────────
-    type Tab = "performers" | "schedule";
+    type Tab = "setup" | "performers" | "schedule";
     let activeTab = $state<Tab>("performers");
     let scheduleHasNewResult = $state(false);
 
@@ -235,43 +253,51 @@
     }
 </script>
 
-<div class="app-shell">
-    <Sidebar
-        {fileName}
-        bind:numSlots
-        {status}
-        {score}
-        {running}
-        {dragOver}
-        onFile={loadFile}
-        onDragOver={() => dragOver = true}
-        onDragLeave={() => dragOver = false}
-    />
+{#if isMobile}
+    <div class="app-shell app-shell--mobile">
+        <nav class="tab-bar">
+            <button
+                class={["tab-btn", activeTab === "setup" && "active"].filter(Boolean).join(" ")}
+                onclick={() => activeTab = "setup"}
+            >
+                Setup
+            </button>
+            <button
+                class={["tab-btn", activeTab === "performers" && "active"].filter(Boolean).join(" ")}
+                onclick={() => activeTab = "performers"}
+            >
+                Performers
+            </button>
+            <button
+                class={["tab-btn", activeTab === "schedule" && "active"].filter(Boolean).join(" ")}
+                onclick={() => { activeTab = "schedule"; scheduleHasNewResult = false; }}
+            >
+                Schedule
+                {#if scheduleHasNewResult}
+                    <span class="tab-badge"></span>
+                {:else if running && slots.length > 0}
+                    <span class="tab-pulse"></span>
+                {/if}
+            </button>
+        </nav>
 
-    <div class="main-area">
-        {#if csvText}
-            <nav class="tab-bar">
-                <button
-                    class={["tab-btn", activeTab === "performers" && "active"].filter(Boolean).join(" ")}
-                    onclick={() => activeTab = "performers"}
-                >
-                    Performers
-                </button>
-                <button
-                    class={["tab-btn", activeTab === "schedule" && "active"].filter(Boolean).join(" ")}
-                    onclick={() => { activeTab = "schedule"; scheduleHasNewResult = false; }}
-                >
-                    Optimized Schedule
-                    {#if scheduleHasNewResult}
-                        <span class="tab-badge"></span>
-                    {:else if running && slots.length > 0}
-                        <span class="tab-pulse"></span>
-                    {/if}
-                </button>
-            </nav>
-
-            <div class="tab-content">
-                <div class="tab-panel" class:tab-hidden={activeTab !== "performers"}>
+        <div class="tab-content">
+            <div class="tab-panel" class:tab-hidden={activeTab !== "setup"}>
+                <Sidebar
+                    {fileName}
+                    bind:numSlots
+                    {status}
+                    {score}
+                    {running}
+                    {dragOver}
+                    variant="tab"
+                    onFile={loadFile}
+                    onDragOver={() => dragOver = true}
+                    onDragLeave={() => dragOver = false}
+                />
+            </div>
+            <div class="tab-panel" class:tab-hidden={activeTab !== "performers"}>
+                {#if csvText}
                     <PerformersTab
                         {performerRoutines}
                         {aliasMap}
@@ -280,19 +306,78 @@
                         onDismissedChange={(s) => dismissedSuggestions = s}
                         onGoToSchedule={() => { activeTab = "schedule"; scheduleHasNewResult = false; }}
                     />
-                </div>
-                <div class="tab-panel" class:tab-hidden={activeTab !== "schedule"}>
-                    <ScheduleTab {slots} {hasStarted} {error} />
-                </div>
+                {:else}
+                    <div class="no-file">
+                        <p class="no-file-prompt">Select a CSV to get started.</p>
+                        <p class="no-file-privacy">No data leaves your device – everything runs locally in your browser.</p>
+                    </div>
+                {/if}
             </div>
-        {:else}
-            <div class="no-file">
-                <p class="no-file-prompt">Select a CSV to get started.</p>
-                <p class="no-file-privacy">No data leaves your device – everything runs locally in your browser.</p>
+            <div class="tab-panel" class:tab-hidden={activeTab !== "schedule"}>
+                <ScheduleTab {slots} {hasStarted} {error} />
             </div>
-        {/if}
+        </div>
     </div>
-</div>
+{:else}
+    <div class="app-shell">
+        <Sidebar
+            {fileName}
+            bind:numSlots
+            {status}
+            {score}
+            {running}
+            {dragOver}
+            onFile={loadFile}
+            onDragOver={() => dragOver = true}
+            onDragLeave={() => dragOver = false}
+        />
+
+        <div class="main-area">
+            {#if csvText}
+                <nav class="tab-bar">
+                    <button
+                        class={["tab-btn", activeTab === "performers" && "active"].filter(Boolean).join(" ")}
+                        onclick={() => activeTab = "performers"}
+                    >
+                        Performers
+                    </button>
+                    <button
+                        class={["tab-btn", activeTab === "schedule" && "active"].filter(Boolean).join(" ")}
+                        onclick={() => { activeTab = "schedule"; scheduleHasNewResult = false; }}
+                    >
+                        Optimized Schedule
+                        {#if scheduleHasNewResult}
+                            <span class="tab-badge"></span>
+                        {:else if running && slots.length > 0}
+                            <span class="tab-pulse"></span>
+                        {/if}
+                    </button>
+                </nav>
+
+                <div class="tab-content">
+                    <div class="tab-panel" class:tab-hidden={activeTab !== "performers"}>
+                        <PerformersTab
+                            {performerRoutines}
+                            {aliasMap}
+                            {dismissedSuggestions}
+                            onAliasMapChange={handleAliasMapChange}
+                            onDismissedChange={(s) => dismissedSuggestions = s}
+                            onGoToSchedule={() => { activeTab = "schedule"; scheduleHasNewResult = false; }}
+                        />
+                    </div>
+                    <div class="tab-panel" class:tab-hidden={activeTab !== "schedule"}>
+                        <ScheduleTab {slots} {hasStarted} {error} />
+                    </div>
+                </div>
+            {:else}
+                <div class="no-file">
+                    <p class="no-file-prompt">Select a CSV to get started.</p>
+                    <p class="no-file-privacy">No data leaves your device – everything runs locally in your browser.</p>
+                </div>
+            {/if}
+        </div>
+    </div>
+{/if}
 
 <style>
     .app-shell {
@@ -405,27 +490,31 @@
         line-height: 1.5;
     }
 
-    /* ── Responsive: stack sidebar on small screens ────────────────────────── */
-    @media (max-width: 40rem) {
-        .app-shell {
-            flex-direction: column;
-            height: auto;
-            min-height: 100vh;
-        }
+    /* ── Mobile: 3-tab layout (Setup / Performers / Schedule) ───────────────── */
+    .app-shell--mobile {
+        flex-direction: column;
+        height: auto;
+        min-height: 100vh;
+    }
 
-        :global(.sidebar) {
-            width: 100% !important;
-            min-width: 0 !important;
-            border-right: none;
-            border-bottom: 1px solid var(--color-border);
-        }
+    .app-shell--mobile .tab-bar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
 
-        .main-area {
-            height: auto;
-        }
+    .app-shell--mobile .tab-content {
+        flex: 1;
+        position: static;
+        overflow: visible;
+    }
 
-        .tab-content {
-            overflow: visible;
-        }
+    .app-shell--mobile .tab-panel {
+        position: static;
+        overflow: visible;
+    }
+
+    .app-shell--mobile .tab-hidden {
+        display: none;
     }
 </style>

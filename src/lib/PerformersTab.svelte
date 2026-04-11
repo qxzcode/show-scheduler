@@ -129,7 +129,7 @@
                 <span class="badge">{visibleSuggestions.length}</span>
                 Suggested duplicates
             </h2>
-            <p class="section-desc">These names look like they may refer to the same person. Accept to merge them under one canonical name.</p>
+            <p class="section-desc">These names look like they may refer to the same person. Merge them under one canonical name?</p>
             <div class="suggestions-list">
                 {#each visibleSuggestions as s (suggestionKey(s))}
                     {@const key = suggestionKey(s)}

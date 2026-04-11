@@ -132,10 +132,6 @@
         border-bottom: none;
     }
 
-    .schedule-table tr:hover td {
-        background: var(--color-surface);
-    }
-
     .col-slot {
         width: 2.5rem;
         color: var(--color-text-faint);

@@ -6,6 +6,7 @@
         score: string;
         running: boolean;
         dragOver: boolean;
+        variant?: 'sidebar' | 'tab';
         onFile: (file: File) => void;
         onDragOver: () => void;
         onDragLeave: () => void;
@@ -18,6 +19,7 @@
         score,
         running,
         dragOver,
+        variant = 'sidebar',
         onFile,
         onDragOver,
         onDragLeave,
@@ -35,7 +37,7 @@
     }
 </script>
 
-<aside class="sidebar">
+<div class={variant === 'sidebar' ? 'sidebar' : 'setup-tab'}>
     <div class="sidebar-logo">Show Scheduler</div>
 
     <section class="sidebar-section">
@@ -84,7 +86,7 @@
             {/each}
         </section>
     {/if}
-</aside>
+</div>
 
 <style>
     .sidebar {
@@ -97,6 +99,14 @@
         flex-direction: column;
         gap: 0.25rem;
         overflow-y: auto;
+    }
+
+    /* Rendered as a tab panel on mobile — no fixed width or sidebar border */
+    .setup-tab {
+        padding: 1.25rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
     }
 
     .sidebar-logo {
