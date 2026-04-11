@@ -1,4 +1,6 @@
 <script lang="ts">
+    import NoFile from "./NoFile.svelte";
+
     interface SlotResult {
         slot_number: number;
         routines: string[];
@@ -22,13 +24,13 @@
             <p class="error-message">{error}</p>
         </div>
     {:else if slots.length === 0}
-        <div class="empty-state">
-            {#if hasStarted}
+        {#if hasStarted}
+            <div class="empty-state">
                 <p>Optimizing…</p>
-            {:else}
-                <p>Select a CSV to begin.</p>
-            {/if}
-        </div>
+            </div>
+        {:else}
+            <NoFile />
+        {/if}
     {:else}
         <table class="schedule-table">
             <thead>

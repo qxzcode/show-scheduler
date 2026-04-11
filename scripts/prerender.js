@@ -53,8 +53,11 @@ function buildComponent(sourcePath, deps = {}) {
 // Sidebar: no component or module deps
 const Sidebar = buildComponent('lib/Sidebar.svelte');
 
-// ScheduleTab: no component or module deps
-const ScheduleTab = buildComponent('lib/ScheduleTab.svelte');
+// NoFile: no deps
+const NoFile = buildComponent('lib/NoFile.svelte');
+
+// ScheduleTab: imports NoFile
+const ScheduleTab = buildComponent('lib/ScheduleTab.svelte', { NoFile });
 
 // PerformersTab: imports suggestMerges from similarity.ts.
 // During SSR csvText is always "" so PerformersTab is never rendered,
@@ -79,6 +82,7 @@ const App = buildComponent('App.svelte', {
     Sidebar,
     PerformersTab,
     ScheduleTab,
+    NoFile,
 });
 
 // ── Render to HTML ────────────────────────────────────────────────────────────
