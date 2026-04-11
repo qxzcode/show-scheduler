@@ -20,6 +20,18 @@
     --sidebar-width: 18rem;
     --border-radius: 0.5rem;
     --border-radius-sm: 0.25rem;
+
+    /* Height of the sticky tab bar on mobile (btn padding×2 + line-height) */
+    --tab-bar-height: calc(0.75rem * 2 + 0.875rem * 1.5 - 1px);
+    /* Offset for sticky table headers: 0 on desktop (scroll container handles it),
+       tab-bar-height on mobile (document is the scroll container) */
+    --sticky-top: 0;
+}
+
+@media (max-width: 40rem) {
+    :root {
+        --sticky-top: var(--tab-bar-height);
+    }
 }
 
 *, *::before, *::after {

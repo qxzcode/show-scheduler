@@ -468,6 +468,7 @@
         flex-direction: column;
         height: auto;
         min-height: 100vh;
+        overflow: visible;
     }
 
     .app-shell--mobile .tab-bar {

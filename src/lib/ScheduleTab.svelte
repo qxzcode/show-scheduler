@@ -120,7 +120,7 @@
         border-bottom: 1px solid var(--color-border);
         background: var(--color-panel);
         position: sticky;
-        top: 0;
+        top: var(--sticky-top, 0);
     }
 
     .schedule-table td {

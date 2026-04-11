@@ -188,30 +188,32 @@
             </div>
         {/if}
 
-        <table class="performers-table">
-            <thead>
-                <tr>
-                    <th>Performer</th>
-                    <th>Routines</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                {#each canonicals as name}
+        <div class="table-scroll">
+            <table class="performers-table">
+                <thead>
                     <tr>
-                        <td class="performer-name">{name}</td>
-                        <td class="routine-tags">
-                            {#each [...(performerRoutines.get(name) ?? [])] as routine}
-                                <span class="routine-tag">{routine}</span>
-                            {/each}
-                        </td>
-                        <td class="merge-cell">
-                            <button class="btn-merge-into" onclick={(e) => openMergeMenu(name, e.currentTarget)}>Merge with…</button>
-                        </td>
+                        <th>Performer</th>
+                        <th>Routines</th>
+                        <th></th>
                     </tr>
-                {/each}
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    {#each canonicals as name}
+                        <tr>
+                            <td class="performer-name">{name}</td>
+                            <td class="routine-tags">
+                                {#each [...(performerRoutines.get(name) ?? [])] as routine}
+                                    <span class="routine-tag">{routine}</span>
+                                {/each}
+                            </td>
+                            <td class="merge-cell">
+                                <button class="btn-merge-into" onclick={(e) => openMergeMenu(name, e.currentTarget)}>Merge with…</button>
+                            </td>
+                        </tr>
+                    {/each}
+                </tbody>
+            </table>
+        </div>
     </section>
 </div>
 
@@ -435,6 +437,11 @@
     }
 
     .btn-unmerge:hover { color: var(--color-danger); }
+
+    .table-scroll {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
 
     .performers-table {
         width: 100%;
