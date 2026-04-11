@@ -1,0 +1,247 @@
+use std::collections::HashSet;
+
+use indicatif::ProgressIterator;
+
+use crate::{
+    Routine,
+    optimize::{MetaRoutine, ProblemInfo},
+    randomize::Randomizer,
+};
+
+/// A candidate solution to the problem.
+struct Solution<'a> {
+    problem_info: &'a ProblemInfo,
+    order: Box<[usize]>,
+    intermission_index: usize,
+    score: Score,
+}
+
+impl<'a> Solution<'a> {
+    /// Creates a new solution initialized with a random order.
+    pub fn new(problem_info: &'a ProblemInfo, randomizer: &mut Randomizer<impl rand::Rng>) -> Self {
+        let mut order: Box<[usize]> = std::iter::repeat_n(0, problem_info.num_slots()).collect();
+        randomizer.randomize_order(&mut order);
+        let mut solution = Self { problem_info, order, intermission_index: 0, score: (0, 0, 0) };
+        solution.randomize(randomizer);
+        solution
+    }
+
+    /// Randomizes the solution (and updates the intermission index and score accordingly).
+    pub fn randomize(&mut self, randomizer: &mut Randomizer<impl rand::Rng>) {
+        randomizer.randomize_order(&mut self.order);
+        self.intermission_index =
+            self.order.iter().position(|&idx| idx == self.problem_info.intermission_index()).unwrap();
+        self.score = score_order(self.problem_info, &self.order);
+    }
+
+    /// Reverses the segment between indices `i` and `j` (inclusive) if it improves the score.
+    /// Returns `true` if the reversal was performed and the score improved, `false` otherwise.
+    pub fn reverse_if_improvement(&mut self, i: usize, j: usize) -> bool {
+        // The reversal would convert this path:
+        //     ..., i-2, i-1, i, i+1, ..., j-1, j, j+1, j+2, ...
+        // into this path:
+        //     ..., i-2, i-1, j, j-1, ..., i+1, i, j+1, j+2, ...
+
+        let n = self.order.len();
+        debug_assert!(i < j && j < n);
+
+        let i = i as isize;
+        let j = j as isize;
+
+        // Check if the mutation decreases `num_dist_1`.
+        let get_num_dist_1 = |i1, i2| {
+            if let (Some(r1), Some(r2)) = (self.order.get(i1 as usize), self.order.get(i2 as usize)) {
+                self.problem_info.intersection_count(*r1, *r2)
+            } else {
+                0
+            }
+        };
+        let old_num_dist_1 = get_num_dist_1(i - 1, i) + get_num_dist_1(j, j + 1);
+        let new_num_dist_1 = get_num_dist_1(i - 1, j) + get_num_dist_1(i, j + 1);
+
+        if new_num_dist_1 > old_num_dist_1 {
+            // Can't be an improvement.
+            return false;
+        }
+
+        // Check if the mutation decreases `num_dist_2`.
+        let get_num_dist_2_triple = |i1, i2, i3| {
+            let has_mid = self.order.get(i2 as usize).is_some_and(|r2| *r2 != self.problem_info.intermission_index());
+            if has_mid { get_num_dist_1(i1, i3) } else { 0 }
+        };
+        let get_num_dist_2 = |i1, i2, i3, i4| get_num_dist_2_triple(i1, i2, i3) + get_num_dist_2_triple(i2, i3, i4);
+        let old_num_dist_2 = get_num_dist_2(i - 2, i - 1, i, i + 1) + get_num_dist_2(j - 1, j, j + 1, j + 2);
+        let new_num_dist_2 = get_num_dist_2(i - 2, i - 1, j, j - 1) + get_num_dist_2(i + 1, i, j + 1, j + 2);
+        if new_num_dist_1 >= old_num_dist_1 && new_num_dist_2 > old_num_dist_2 {
+            // Can't be an improvement.
+            return false;
+        }
+
+        let i = i as usize;
+        let j = j as usize;
+
+        // Check if the mutation improves `intermission_middle_dist`.
+        let old_intermission_middle_dist = self.score.2;
+        let new_intermission_index = if (i..=j).contains(&self.intermission_index) {
+            // Intermission is within the reversed segment.
+            i + (j - self.intermission_index)
+        } else {
+            self.intermission_index
+        };
+        let new_intermission_middle_dist = get_middle_dist(n, new_intermission_index);
+
+        if new_num_dist_1 >= old_num_dist_1
+            && new_num_dist_2 >= old_num_dist_2
+            && new_intermission_middle_dist >= old_intermission_middle_dist
+        {
+            // Not an improvement.
+            return false;
+        }
+
+        // Perform the reversal and update metadata.
+        self.order[i..=j].reverse();
+        self.intermission_index = new_intermission_index;
+        self.score = (
+            self.score.0 + new_num_dist_1 - old_num_dist_1,
+            self.score.1 + new_num_dist_2 - old_num_dist_2,
+            new_intermission_middle_dist,
+        );
+        true
+    }
+}
+
+pub fn optimize_order(routines: &[Routine], num_slots: usize) -> (Box<[usize]>, Score) {
+    let problem_info = ProblemInfo::new(routines, num_slots);
+
+    let mut randomizer = Randomizer::new(&problem_info, rand::rng());
+
+    let mut solution = Solution::new(&problem_info, &mut randomizer);
+    let mut best_order = solution.order.clone();
+    let mut best_score = solution.score;
+
+    for _ in (0..100_000).progress() {
+        solution.randomize(&mut randomizer);
+        let score = hill_climb_order(&problem_info, &mut solution);
+        if score < best_score {
+            best_score = score;
+            best_order.clone_from(&solution.order);
+            println!("New best score: {:?}", best_score);
+        }
+    }
+
+    println!();
+    print_order(&best_order, &problem_info);
+
+    (best_order, best_score)
+}
+
+fn hill_climb_order(problem_info: &ProblemInfo, solution: &mut Solution) -> Score {
+    let n = problem_info.num_slots();
+    let mut last_improvement = (n - 2, n - 1);
+    'main_loop: loop {
+        for i in 0..n {
+            for j in (i + 1)..n {
+                if (i, j) == last_improvement {
+                    break 'main_loop;
+                }
+
+                if solution.reverse_if_improvement(i, j) {
+                    // println!("Improved score to {:?} by reversing segment [{i}, {j}]", solution.score);
+
+                    debug_assert_eq!(score_order(problem_info, &solution.order), solution.score);
+
+                    if solution.score == (0, 0, 0) {
+                        println!("Found optimal score!");
+                        return solution.score;
+                    }
+                    last_improvement = (i, j);
+                }
+            }
+        }
+    }
+    // println!();
+
+    solution.score
+}
+
+type Score = (usize, usize, usize); // (num_dist_1, num_dist_2, intermission_middle_dist)
+
+fn score_order(problem_info: &ProblemInfo, order: &[usize]) -> Score {
+    #[cfg(debug_assertions)]
+    {
+        // Verify that each routine appears exactly once.
+        let mut seen = vec![false; problem_info.routines().len()];
+        for &idx in order {
+            for routine_idx in problem_info.meta_routines()[idx].routine_indices() {
+                debug_assert!(!seen[routine_idx], "Duplicate routine index in order: {routine_idx}");
+                seen[routine_idx] = true;
+            }
+        }
+        debug_assert!(seen.into_iter().all(|x| x), "Not all routines are included in the order");
+    }
+
+    let mut num_dist_1 = 0;
+    let mut num_dist_2 = 0;
+    let n = order.len();
+    for i in 0..(n - 1) {
+        num_dist_1 += problem_info.intersection_count(order[i], order[i + 1]);
+        if i + 2 < n && order[i + 1] != problem_info.intermission_index() {
+            num_dist_2 += problem_info.intersection_count(order[i], order[i + 2]);
+        }
+    }
+
+    let intermission_index = order.iter().position(|&idx| idx == problem_info.intermission_index()).unwrap();
+    let intermission_middle_dist = get_middle_dist(n, intermission_index);
+
+    (num_dist_1, num_dist_2, intermission_middle_dist)
+}
+
+fn get_middle_dist(n: usize, index: usize) -> usize {
+    if index >= n / 2 {
+        index - (n / 2)
+    } else {
+        let middle_index = if n.is_multiple_of(2) { (n / 2) - 1 } else { n / 2 };
+        middle_index - index
+    }
+}
+
+pub fn print_order(order: &[usize], problem_info: &ProblemInfo) {
+    println!("Optimized meta-routine order:");
+    println!("{order:?}");
+    println!();
+    for pos in 0..order.len() {
+        let mr = &problem_info.meta_routines()[order[pos]];
+        print!("    Slot {:>2}:  ", pos + 1);
+        match mr {
+            MetaRoutine::Single(r) => {
+                println!("{}", problem_info.routines()[*r].name);
+            }
+            MetaRoutine::Double(r1, r2) => {
+                println!("{},  {}", problem_info.routines()[*r1].name, problem_info.routines()[*r2].name);
+            }
+        }
+
+        // Show conflicts, if any.
+        let dancers0: HashSet<_> = mr.dancers(problem_info.routines()).collect();
+        if let Some(mr1) = order.get(pos + 1) {
+            let dancers1: HashSet<_> = problem_info.meta_routines()[*mr1].dancers(problem_info.routines()).collect();
+            if !dancers0.is_disjoint(&dancers1) {
+                let conflicts: Vec<_> = dancers0.intersection(&dancers1).collect();
+                println!("        distance-1 conflicts ({}):  {conflicts:?}", conflicts.len());
+            }
+
+            if *mr1 != problem_info.intermission_index()
+                && let Some(mr2) = order.get(pos + 2)
+            {
+                let dancers2: HashSet<_> =
+                    problem_info.meta_routines()[*mr2].dancers(problem_info.routines()).collect();
+                if !dancers0.is_disjoint(&dancers2) {
+                    let conflicts: Vec<_> = dancers0.intersection(&dancers2).collect();
+                    println!("        distance-2 conflicts ({}):  {conflicts:?}", conflicts.len());
+                }
+            }
+        }
+    }
+    println!();
+    println!("Score: {:?}", score_order(problem_info, order));
+}

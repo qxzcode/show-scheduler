@@ -1,7 +1,9 @@
 mod lazy_d2_costs;
 mod local_search;
 pub mod optimize;
+pub mod optimize2;
 pub mod optimize_complete;
+pub mod randomize;
 mod subtour_elimination;
 
 use std::{
@@ -101,13 +103,14 @@ fn main() {
     // println!();
 
     let num_slots = 31 + 1; // +1 for intermission
-    for _ in 0..1 {
-        let optimized_order = optimize_complete::optimize_order(&input_data.routines, num_slots);
-        // TODO: the above function needs to return a list of meta-routine indices, not routine indices
-        println!("Optimal routine order: {optimized_order:?}");
-    }
+    // for _ in 0..1 {
+    //     let optimized_order = optimize_complete::optimize_order(&input_data.routines, num_slots);
+    //     // TODO: the above function needs to return a list of meta-routine indices, not routine indices
+    //     println!("Optimal meta-routine order: {optimized_order:?}");
+    // }
 
     // let (optimized_order, score) = optimize::optimize_order(&input_data.routines);
+    let (optimized_order, score) = optimize2::optimize_order(&input_data.routines, num_slots);
     // println!("Optimized routine order:");
     // println!("{optimized_order:?}");
     // for &idx in &optimized_order {
