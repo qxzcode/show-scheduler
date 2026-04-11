@@ -23,8 +23,7 @@ impl<'a> Solution<'a> {
     /// Randomizes the solution (and updates the intermission index and score accordingly).
     pub fn randomize(&mut self, randomizer: &mut Randomizer<impl rand::Rng>) {
         randomizer.randomize_order(&mut self.order);
-        self.intermission_index =
-            self.order.iter().position(|&idx| idx == self.problem_info.intermission_index()).unwrap();
+        self.intermission_index = self.problem_info.intermission_index_in_order(&self.order);
         self.score = score_order(self.problem_info, &self.order);
     }
 
@@ -177,7 +176,7 @@ fn score_order(problem_info: &ProblemInfo, order: &[usize]) -> Score {
         }
     }
 
-    let intermission_index = order.iter().position(|&idx| idx == problem_info.intermission_index()).unwrap();
+    let intermission_index = problem_info.intermission_index_in_order(order);
     let intermission_middle_dist = get_middle_dist(n, intermission_index);
 
     (num_dist_1, num_dist_2, intermission_middle_dist)

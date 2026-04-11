@@ -65,11 +65,14 @@ impl ProblemInfo {
             }
         }
 
-        let intermission_routine_index = routines.iter().position(|r| r.name == "[Intermission]").unwrap();
+        let intermission_routine_index = routines
+            .iter()
+            .position(|r| r.name == "[Intermission]")
+            .expect("routines should include an entry named '[Intermission]'");
         let intermission_index = meta_routines
             .iter()
             .position(|mr| matches!(mr, MetaRoutine::Single(i) if *i == intermission_routine_index))
-            .unwrap();
+            .expect("the intermission routine should be included as a Single meta-routine");
 
         let filter_single_mr_indices = |doubleable: bool| {
             meta_routines
@@ -90,7 +93,7 @@ impl ProblemInfo {
 
         let doubleable_r_indices = doubleable_mr_indices.iter().map(|&mr_index| match meta_routines[mr_index] {
             MetaRoutine::Single(routine_index) => routine_index,
-            _ => unreachable!(),
+            _ => unreachable!("doubleable_mr_indices should only contain Single meta-routines"),
         });
         let mrs: &[MetaRoutine] = meta_routines.as_ref();
         let combined_mr_indices: Box<[Option<usize>]> = doubleable_r_indices
@@ -103,7 +106,7 @@ impl ProblemInfo {
                                 matches!(mr, MetaRoutine::Double(i, j)
                                     if (*i == r1 && *j == r2) || (*i == r2 && *j == r1))
                             })
-                            .unwrap()
+                            .expect("there should be a Double meta-routine for every pair of doubleable routines")
                     })
                 })
             })
@@ -148,7 +151,7 @@ impl ProblemInfo {
 
     /// Returns the index of the meta-routine that results from combining the two given single-routine meta-routines.
     pub fn double_mr_index(&self, mr1_index: usize, mr2_index: usize) -> Option<usize> {
-        let first_dmr_index = *self.doubleable_mr_indices.first().unwrap();
+        let first_dmr_index = *self.doubleable_mr_indices.first().unwrap_or(&self.meta_routines.len());
         let i = mr1_index.checked_sub(first_dmr_index)?;
         let j = mr2_index.checked_sub(first_dmr_index)?;
         let double_mr_index = *self.combined_mr_indices.get(i * self.doubleable_mr_indices.len() + j)?.as_ref()?;
@@ -156,7 +159,8 @@ impl ProblemInfo {
             double_mr_index,
             self.meta_routines().iter().position(|mr| {
                 matches!(mr, MetaRoutine::Double(i, j) if (*i == mr1_index && *j == mr2_index) || (*i == mr2_index && *j == mr1_index))
-            }).unwrap(),
+            }).expect("there should be a Double meta-routine for every pair of doubleable routines"),
+            "double_mr_index should match the position of the corresponding Double meta-routine"
         );
         Some(double_mr_index)
     }
@@ -164,6 +168,14 @@ impl ProblemInfo {
     /// Returns the index of the intermission meta-routine (in the list returned by `meta_routines()`).
     pub fn intermission_index(&self) -> usize {
         self.intermission_index
+    }
+
+    /// Returns the index of the intermission meta-routine in the given order of meta-routines.
+    pub fn intermission_index_in_order(&self, order: &[usize]) -> usize {
+        order
+            .iter()
+            .position(|&idx| idx == self.intermission_index)
+            .expect("the order should always include the intermission index")
     }
 
     /// Returns the number of dancers performing in both meta-routine `i` and meta-routine `j`.
