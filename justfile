@@ -1,8 +1,14 @@
 _default:
     just --list
 
-build:
-    wasm-pack build --target web --out-dir web/pkg
+install:
+    bun install
 
-dev:
+build: install
+    bun run build
+
+dev: install
     bun run dev --open
+
+preview: build
+    bun run preview --open
