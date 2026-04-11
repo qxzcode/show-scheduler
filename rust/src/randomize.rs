@@ -1,6 +1,6 @@
 use rand::RngExt;
 
-use crate::optimize::ProblemInfo;
+use crate::preprocessing::ProblemInfo;
 
 /// Helper struct for sampling from a collection without replacement.
 struct SamplerWithoutReplacement {

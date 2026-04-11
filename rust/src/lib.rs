@@ -1,5 +1,5 @@
 mod optimize;
-mod optimize2;
+mod preprocessing;
 mod randomize;
 
 use std::collections::HashSet;
@@ -81,8 +81,8 @@ pub fn optimize(routines_json: &str, num_slots: usize, num_iterations: u32) -> R
         return Err("routines must include an '[Intermission]' entry (call parse_csv to generate it)".into());
     }
 
-    let (order, score) = optimize2::optimize_order(&routines, num_slots, num_iterations);
-    let problem_info = optimize::ProblemInfo::new(&routines, num_slots);
+    let (order, score) = optimize::optimize_order(&routines, num_slots, num_iterations);
+    let problem_info = preprocessing::ProblemInfo::new(&routines, num_slots);
     let slots = build_slot_results(&order, &problem_info, &routines);
 
     let output = OptimizeOutput { slots, score: [score.0, score.1, score.2] };
@@ -105,9 +105,9 @@ pub fn optimize_streaming(routines_json: &str, num_slots: usize, callback: &js_s
         return Err("routines must include an '[Intermission]' entry (call parse_csv to generate it)".into());
     }
 
-    let problem_info = optimize::ProblemInfo::new(&routines, num_slots);
+    let problem_info = preprocessing::ProblemInfo::new(&routines, num_slots);
 
-    optimize2::optimize_order_streaming(&routines, num_slots, |order, score| {
+    optimize::optimize_order_streaming(&routines, num_slots, |order, score| {
         let slots = build_slot_results(order, &problem_info, &routines);
         let output = OptimizeOutput { slots, score: [score.0, score.1, score.2] };
         if let Ok(json) = serde_json::to_string(&output) {
@@ -144,7 +144,11 @@ fn do_parse_csv(csv: &str) -> Result<Vec<Routine>, String> {
     Ok(routines)
 }
 
-fn build_slot_results(order: &[usize], problem_info: &optimize::ProblemInfo, routines: &[Routine]) -> Vec<SlotResult> {
+fn build_slot_results(
+    order: &[usize],
+    problem_info: &preprocessing::ProblemInfo,
+    routines: &[Routine],
+) -> Vec<SlotResult> {
     let n = order.len();
     (0..n)
         .map(|pos| {
