@@ -1,4 +1,6 @@
 <script lang="ts">
+    import type { CustomConstraint } from "$lib/types";
+
     interface Props {
         fileName: string;
         numSlots: number;
@@ -11,10 +13,14 @@
         running: boolean;
         dragOver: boolean;
         variant?: 'sidebar' | 'tab';
+        routineNames: string[];
+        customConstraints: CustomConstraint[];
+        constraintSatisfied: (boolean | null)[];
         onFile: (file: File) => void;
         onDragOver: () => void;
         onDragLeave: () => void;
         onRegenerate?: () => void;
+        onConstraintsChange: (c: CustomConstraint[]) => void;
     }
 
     let {
@@ -29,11 +35,50 @@
         running,
         dragOver,
         variant = 'sidebar',
+        routineNames,
+        customConstraints,
+        constraintSatisfied,
         onFile,
         onDragOver,
         onDragLeave,
         onRegenerate,
+        onConstraintsChange,
     }: Props = $props();
+
+    function addConstraint() {
+        const firstRoutine = routineNames[0] ?? '';
+        onConstraintsChange([
+            ...customConstraints,
+            { id: `c${Date.now()}`, kind: 'in_slot', routine: firstRoutine, slot: 1 },
+        ]);
+    }
+
+    function removeConstraint(id: string) {
+        onConstraintsChange(customConstraints.filter(c => c.id !== id));
+    }
+
+    function updateConstraint(id: string, updates: Partial<CustomConstraint>) {
+        onConstraintsChange(
+            customConstraints.map(c => (c.id === id ? { ...c, ...updates } as CustomConstraint : c))
+        );
+    }
+
+    function changeConstraintKind(id: string, newKind: 'in_slot' | 'directly_before') {
+        const c = customConstraints.find(c => c.id === id);
+        if (!c) return;
+        let updated: CustomConstraint;
+        if (newKind === 'in_slot') {
+            // Preserve the "primary" routine (row 1): for directly_before that's beforeRoutine
+            const routine = c.kind === 'directly_before' ? c.beforeRoutine : c.routine;
+            updated = { id, kind: 'in_slot', routine, slot: 1 };
+        } else {
+            // Preserve the "primary" routine (row 1) as beforeRoutine
+            const beforeRoutine = c.kind === 'in_slot' ? c.routine : c.beforeRoutine;
+            const afterRoutine = routineNames.find(r => r !== beforeRoutine) ?? routineNames[0] ?? '';
+            updated = { id, kind: 'directly_before', beforeRoutine, afterRoutine };
+        }
+        onConstraintsChange(customConstraints.map(c => (c.id === id ? updated : c)));
+    }
 
     function onFileInput(e: Event) {
         const file = (e.target as HTMLInputElement).files?.[0];
@@ -123,6 +168,84 @@
             </div>
         {/if}
     </section>
+
+    {#if fileName}
+        <section class="sidebar-section">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
+            <label class="field-label">Custom Constraints</label>
+            <div class="constraint-list">
+                {#each customConstraints as constraint, i (constraint.id)}
+                    <div
+                        class="constraint-item"
+                        class:constraint-violated={constraintSatisfied[i] === false}
+                    >
+                        <div class="constraint-row">
+                            <span class="constraint-label">Put</span>
+                            <select
+                                class="constraint-select"
+                                value={constraint.kind === 'in_slot' ? constraint.routine : constraint.beforeRoutine}
+                                onchange={(e) => {
+                                    const val = (e.target as HTMLSelectElement).value;
+                                    if (constraint.kind === 'in_slot') {
+                                        updateConstraint(constraint.id, { routine: val });
+                                    } else {
+                                        updateConstraint(constraint.id, { beforeRoutine: val });
+                                    }
+                                }}
+                            >
+                                {#each routineNames as name}
+                                    <option value={name}>{name}</option>
+                                {/each}
+                            </select>
+                            <button
+                                class="constraint-delete"
+                                onclick={() => removeConstraint(constraint.id)}
+                                title="Remove constraint"
+                            >✕</button>
+                        </div>
+                        <div class="constraint-row">
+                            <select
+                                class="constraint-type-select"
+                                value={constraint.kind}
+                                onchange={(e) => changeConstraintKind(constraint.id, (e.target as HTMLSelectElement).value as 'in_slot' | 'directly_before')}
+                            >
+                                <option value="directly_before">directly before</option>
+                                <option value="in_slot">in slot</option>
+                            </select>
+                            {#if constraint.kind === 'in_slot'}
+                                <input
+                                    type="number"
+                                    class="constraint-slot-input"
+                                    min="1"
+                                    max={numSlots}
+                                    value={constraint.slot}
+                                    onchange={(e) => {
+                                        const raw = parseInt((e.target as HTMLInputElement).value);
+                                        const clamped = Math.max(1, Math.min(numSlots, raw || 1));
+                                        (e.target as HTMLInputElement).value = String(clamped);
+                                        updateConstraint(constraint.id, { slot: clamped });
+                                    }}
+                                />
+                            {:else}
+                                <select
+                                    class="constraint-select"
+                                    value={constraint.afterRoutine}
+                                    onchange={(e) => updateConstraint(constraint.id, { afterRoutine: (e.target as HTMLSelectElement).value })}
+                                >
+                                    {#each routineNames as name}
+                                        <option value={name}>{name}</option>
+                                    {/each}
+                                </select>
+                            {/if}
+                        </div>
+                    </div>
+                {/each}
+            </div>
+            <button class="add-constraint-btn" onclick={addConstraint}>
+                + New constraint
+            </button>
+        </section>
+    {/if}
 
     {#if status}
         <section class="sidebar-section">
@@ -355,5 +478,102 @@
     .regen-btn:disabled {
         opacity: 0.4;
         cursor: default;
+    }
+
+    /* ── Custom constraints ──────────────────────────────────────────────────── */
+
+    .constraint-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin-bottom: 0.4rem;
+    }
+
+    .constraint-item {
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius-sm);
+        padding: 0.35rem 0.4rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        background: var(--color-surface);
+        transition: border-color 0.15s, background 0.15s;
+    }
+
+    .constraint-item.constraint-violated {
+        border-color: var(--color-danger);
+        background: var(--color-danger-dim);
+    }
+
+    .constraint-row {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .constraint-label {
+        font-size: 0.72rem;
+        color: var(--color-text-muted);
+        flex-shrink: 0;
+    }
+
+    .constraint-select,
+    .constraint-type-select,
+    .constraint-slot-input {
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius-sm);
+        color: var(--color-text);
+        font-size: 0.75rem;
+        padding: 0.15rem 0.25rem;
+        cursor: pointer;
+    }
+
+    .constraint-select {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .constraint-type-select {
+        flex-shrink: 0;
+    }
+
+    .constraint-slot-input {
+        width: 3.2rem;
+        flex-shrink: 0;
+        cursor: text;
+    }
+
+    .constraint-delete {
+        flex-shrink: 0;
+        background: none;
+        border: none;
+        color: var(--color-text-faint);
+        cursor: pointer;
+        padding: 0.1rem 0.2rem;
+        font-size: 0.75rem;
+        line-height: 1;
+        margin-left: auto;
+    }
+
+    .constraint-delete:hover {
+        color: var(--color-danger);
+    }
+
+    .add-constraint-btn {
+        width: 100%;
+        padding: 0.35rem;
+        background: none;
+        border: 1px dashed var(--color-border);
+        border-radius: var(--border-radius-sm);
+        color: var(--color-text-faint);
+        font-size: 0.78rem;
+        cursor: pointer;
+        transition: border-color 0.15s, color 0.15s;
+    }
+
+    .add-constraint-btn:hover {
+        border-color: var(--color-accent);
+        color: var(--color-accent-light);
     }
 </style>

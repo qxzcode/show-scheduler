@@ -4,6 +4,9 @@ _default:
 install:
     bun install
 
+check:
+    cd rust/ && cargo fmt && cargo clippy
+
 build: install
     bun run build
 

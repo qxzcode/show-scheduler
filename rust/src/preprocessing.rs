@@ -23,6 +23,16 @@ impl MetaRoutine {
     }
 }
 
+/// A constraint on the optimizer, pre-compiled to use routine indices instead of names.
+#[derive(Clone, Debug)]
+pub enum CompiledConstraint {
+    /// The meta-routine containing `routine_idx` must land at `target_slot` (0-indexed).
+    InSlot { routine_idx: usize, target_slot: usize },
+    /// The meta-routine containing `after_routine_idx` must be in the slot immediately
+    /// following the meta-routine containing `before_routine_idx`.
+    DirectlyBefore { after_routine_idx: usize, before_routine_idx: usize },
+}
+
 /// Pre-processed information about a particular problem instance.
 #[derive(Clone, Debug)]
 pub struct ProblemInfo {
@@ -35,10 +45,16 @@ pub struct ProblemInfo {
     combined_mr_indices: Box<[Option<usize>]>,
     intermission_index: usize,
     intersection_counts: Vec<usize>,
+    constraints: Box<[CompiledConstraint]>,
 }
 
 impl ProblemInfo {
-    pub fn new(routines: &[Routine], num_slots: usize, intermission_tolerance: usize) -> Self {
+    pub fn new(
+        routines: &[Routine],
+        num_slots: usize,
+        intermission_tolerance: usize,
+        constraints: &[super::ConstraintSpec],
+    ) -> Result<Self, String> {
         let mut meta_routines = Vec::new();
         meta_routines.extend((0..routines.len()).map(MetaRoutine::Single)); // All single routines.
         for i in 0..routines.len() {
@@ -113,7 +129,35 @@ impl ProblemInfo {
             })
             .collect();
 
-        Self {
+        // Compile constraints: resolve routine names to indices, error on unknown names.
+        let compiled_constraints: Box<[CompiledConstraint]> = constraints
+            .iter()
+            .map(|c| match c {
+                super::ConstraintSpec::InSlot { routine, slot } => {
+                    let routine_idx = routines
+                        .iter()
+                        .position(|r| &r.name == routine)
+                        .ok_or_else(|| format!("constraint references unknown routine: '{routine}'"))?;
+                    // Convert from 1-indexed (user-facing) to 0-indexed (internal)
+                    let target_slot =
+                        slot.checked_sub(1).ok_or_else(|| "constraint slot must be at least 1".to_string())?;
+                    Ok(CompiledConstraint::InSlot { routine_idx, target_slot })
+                }
+                super::ConstraintSpec::DirectlyBefore { after_routine, before_routine } => {
+                    let after_routine_idx = routines
+                        .iter()
+                        .position(|r| &r.name == after_routine)
+                        .ok_or_else(|| format!("constraint references unknown routine: '{after_routine}'"))?;
+                    let before_routine_idx = routines
+                        .iter()
+                        .position(|r| &r.name == before_routine)
+                        .ok_or_else(|| format!("constraint references unknown routine: '{before_routine}'"))?;
+                    Ok(CompiledConstraint::DirectlyBefore { after_routine_idx, before_routine_idx })
+                }
+            })
+            .collect::<Result<Box<[_]>, String>>()?;
+
+        Ok(Self {
             num_slots,
             intermission_tolerance,
             routines: routines.into(),
@@ -123,7 +167,8 @@ impl ProblemInfo {
             meta_routines: meta_routines.into(),
             intersection_counts,
             intermission_index,
-        }
+            constraints: compiled_constraints,
+        })
     }
 
     /// Returns the number of time slots that the routines must be scheduled into (including the intermission).
@@ -190,5 +235,10 @@ impl ProblemInfo {
         let n = self.meta_routines.len();
         debug_assert!(i < n && j < n);
         self.intersection_counts[j + i * n]
+    }
+
+    /// Returns the compiled constraints for this problem.
+    pub fn constraints(&self) -> &[CompiledConstraint] {
+        self.constraints.as_ref()
     }
 }

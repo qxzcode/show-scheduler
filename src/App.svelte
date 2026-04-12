@@ -4,6 +4,7 @@
     import PerformersTab from "$lib/PerformersTab.svelte";
     import ScheduleTab from "$lib/ScheduleTab.svelte";
     import NoFile from "$lib/NoFile.svelte";
+    import type { CustomConstraint } from "$lib/types";
 
     interface ConflictGroup {
         routine: string;
@@ -32,6 +33,9 @@
     // ── Alias map: alias → canonical ─────────────────────────────────────────
     let aliasMap = $state(new Map<string, string>());
     let dismissedSuggestions = $state(new Set<string>());
+
+    // ── Custom constraints ────────────────────────────────────────────────────
+    let customConstraints = $state<CustomConstraint[]>([]);
 
     // ── Optimizer state ───────────────────────────────────────────────────────
     let slots = $state<SlotResult[]>([]);
@@ -185,11 +189,46 @@
             .join("\n");
     }
 
+    // ── Routine names (for constraint dropdowns) ──────────────────────────────
+    let routineNames = $derived(extractRoutineNames(normalizedCsv));
+
+    function extractRoutineNames(csv: string): string[] {
+        if (!csv.trim()) return [];
+        const firstLine = csv.trim().split(/\r?\n/)[0];
+        const names = parseCSVLine(firstLine).map(normalizeName).filter(Boolean);
+        // [Intermission] is appended by the WASM parse_csv; include it here for the constraint UI
+        return [...names, '[Intermission]'];
+    }
+
+    // ── Constraint satisfaction (checked against the current displayed schedule) ─
+    let constraintSatisfied = $derived(checkConstraints(customConstraints, slots));
+
+    function checkConstraints(constraints: CustomConstraint[], currentSlots: SlotResult[]): (boolean | null)[] {
+        // null = no schedule to evaluate against yet
+        if (currentSlots.length === 0) return constraints.map(() => null);
+        return constraints.map(c => {
+            if (c.kind === 'in_slot') {
+                const targetSlot = currentSlots.find(s => s.slot_number === c.slot);
+                return targetSlot?.routines.includes(c.routine) ?? false;
+            } else {
+                // directly_before: c.afterRoutine must be in the slot immediately after c.beforeRoutine
+                for (const slot of currentSlots) {
+                    if (slot.routines.includes(c.beforeRoutine)) {
+                        const next = currentSlots.find(s => s.slot_number === slot.slot_number + 1);
+                        if (next?.routines.includes(c.afterRoutine)) return true;
+                    }
+                }
+                return false;
+            }
+        });
+    }
+
     // ── Auto-restart optimizer when inputs change ─────────────────────────────
     $effect(() => {
         const csv = normalizedCsv;
         const ns = numSlots;
         const it = intermissionTolerance;
+        const constraints = customConstraints; // tracked so constraint changes also restart
         if (!csv.trim()) {
             worker?.terminate();
             worker = null;
@@ -200,10 +239,10 @@
             status = "";
             return;
         }
-        startOptimizer(csv, ns, it);
+        startOptimizer(csv, ns, it, constraints);
     });
 
-    function startOptimizer(csv: string, ns: number, it: number) {
+    function startOptimizer(csv: string, ns: number, it: number, constraints: CustomConstraint[]) {
         worker?.terminate();
 
         running = true;
@@ -244,7 +283,12 @@
             worker = null;
         };
 
-        worker.postMessage({ csvText: csv.trim(), numSlots: ns, intermissionTolerance: it });
+        worker.postMessage({
+            csvText: csv.trim(),
+            numSlots: ns,
+            intermissionTolerance: it,
+            constraintsJson: JSON.stringify(constraints),
+        });
     }
 
     // ── Obvious auto-merges ───────────────────────────────────────────────────
@@ -312,6 +356,7 @@
             aliasMap = computeAutoMerges(csv);
             numSlots = slotRange.max;
             dismissedSuggestions = new Set();
+            customConstraints = [];
             scheduleHasNewResult = false;
             error = "";
             activeTab = "performers";
@@ -323,8 +368,12 @@
         aliasMap = newMap;
     }
 
+    function handleConstraintsChange(newConstraints: CustomConstraint[]) {
+        customConstraints = newConstraints;
+    }
+
     function handleRegenerate() {
-        if (normalizedCsv.trim()) startOptimizer(normalizedCsv, numSlots, intermissionTolerance);
+        if (normalizedCsv.trim()) startOptimizer(normalizedCsv, numSlots, intermissionTolerance, customConstraints);
     }
 </script>
 
@@ -370,10 +419,14 @@
                     {running}
                     {dragOver}
                     variant="tab"
+                    {routineNames}
+                    {customConstraints}
+                    {constraintSatisfied}
                     onFile={loadFile}
                     onDragOver={() => dragOver = true}
                     onDragLeave={() => dragOver = false}
                     onRegenerate={handleRegenerate}
+                    onConstraintsChange={handleConstraintsChange}
                 />
             </div>
             <div class="tab-panel" class:tab-hidden={activeTab !== "performers"}>
@@ -408,10 +461,14 @@
             {score}
             {running}
             {dragOver}
+            {routineNames}
+            {customConstraints}
+            {constraintSatisfied}
             onFile={loadFile}
             onDragOver={() => dragOver = true}
             onDragLeave={() => dragOver = false}
             onRegenerate={handleRegenerate}
+            onConstraintsChange={handleConstraintsChange}
         />
 
         <div class="main-area">
