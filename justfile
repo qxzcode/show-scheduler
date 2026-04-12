@@ -6,6 +6,7 @@ install:
 
 check:
     cd rust/ && cargo fmt && cargo clippy
+    bun run check
 
 build: install
     bun run build
