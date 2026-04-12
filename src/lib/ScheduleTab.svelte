@@ -21,6 +21,16 @@
 
     let { slots, hasStarted, error }: Props = $props();
 
+    let copied = $state(false);
+
+    function copySchedule() {
+        const tsv = slots.map(s => `${s.slot_number}\t${s.routines.join(" + ")}`).join("\n");
+        navigator.clipboard.writeText(tsv).then(() => {
+            copied = true;
+            setTimeout(() => copied = false, 2000);
+        });
+    }
+
     function formatNames(names: string[]): string {
         if (names.length === 1) return names[0];
         if (names.length === 2) return `${names[0]} and ${names[1]}`;
@@ -47,6 +57,14 @@
             <NoFile />
         {/if}
     {:else}
+        <button class="copy-btn" class:copy-btn--copied={copied} onclick={copySchedule} title="Copy schedule">
+            {#if copied}
+                Copied!
+            {:else}
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                Copy schedule
+            {/if}
+        </button>
         <table class="schedule-table">
             <thead>
                 <tr>
@@ -81,6 +99,35 @@
 <style>
     .schedule-tab {
         padding: 1.5rem;
+    }
+
+    .copy-btn {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.35rem 0.75rem;
+        background: var(--color-panel);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius-sm);
+        color: var(--color-text-muted);
+        font-size: 0.78rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: border-color 0.15s, color 0.15s;
+    }
+
+    .copy-btn:hover {
+        border-color: var(--color-accent);
+        color: var(--color-accent-light);
+    }
+
+    .copy-btn--copied {
+        border-color: var(--color-success);
+        color: var(--color-success);
     }
 
     .empty-state {
