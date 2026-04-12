@@ -249,7 +249,7 @@
         hasStarted = true;
         status = "Optimizing…";
         slots = [];
-        score = "";
+        score = null;
         error = "";
 
         worker = new OptimizerWorker();
@@ -509,10 +509,7 @@
                     </div>
                 </div>
             {:else}
-                <div class="no-file">
-                    <p class="no-file-prompt">Select a CSV to get started.</p>
-                    <p class="no-file-privacy">No data leaves your device – everything runs locally in your browser.</p>
-                </div>
+                <NoFile />
             {/if}
         </div>
     </div>

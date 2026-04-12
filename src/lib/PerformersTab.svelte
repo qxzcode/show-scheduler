@@ -382,10 +382,6 @@
         color: var(--color-accent);
     }
 
-    .performers-section {
-        /* no extra margin needed */
-    }
-
     .alias-list {
         background: var(--color-surface);
         border: 1px solid var(--color-border);

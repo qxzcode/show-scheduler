@@ -123,51 +123,47 @@
         </ul>
     </section>
 
-    <section class="sidebar-section">
-        <label class="field-label" for="num-slots">
-            Show slots (incl. intermission)
-            {#if fileName}<span class="slot-value">{numSlots}</span>{/if}
-        </label>
-        <input
-            class="slot-slider"
-            type="range"
-            id="num-slots"
-            min={minSlots}
-            max={maxSlots}
-            step="1"
-            disabled={!fileName}
-            bind:value={numSlots}
-        />
-        {#if fileName}
+    {#if fileName}
+        <section class="sidebar-section">
+            <label class="field-label" for="num-slots">
+                Show slots (incl. intermission)
+                <span class="slot-value">{numSlots}</span>
+            </label>
+            <input
+                class="slot-slider"
+                type="range"
+                id="num-slots"
+                min={minSlots}
+                max={maxSlots}
+                step="1"
+                bind:value={numSlots}
+            />
             <div class="slider-bounds">
                 <span>{minSlots}</span>
                 <span>{maxSlots}</span>
             </div>
-        {/if}
-    </section>
+        </section>
 
-    <section class="sidebar-section">
-        <label class="field-label" for="intermission-tolerance">
-            Intermission tolerance
-            {#if fileName}<span class="slot-value">{intermissionTolerance}</span>{/if}
-        </label>
-        <input
-            class="slot-slider"
-            type="range"
-            id="intermission-tolerance"
-            min="0"
-            max={maxIntermissionTolerance}
-            step="1"
-            disabled={!fileName}
-            bind:value={intermissionTolerance}
-        />
-        {#if fileName}
+        <section class="sidebar-section">
+            <label class="field-label" for="intermission-tolerance">
+                Intermission tolerance
+                <span class="slot-value">{intermissionTolerance}</span>
+            </label>
+            <input
+                class="slot-slider"
+                type="range"
+                id="intermission-tolerance"
+                min="0"
+                max={maxIntermissionTolerance}
+                step="1"
+                bind:value={intermissionTolerance}
+            />
             <div class="slider-bounds">
                 <span>strict</span>
                 <span>loose</span>
             </div>
-        {/if}
-    </section>
+        </section>
+    {/if}
 
     {#if fileName}
         <section class="sidebar-section">
@@ -400,11 +396,6 @@
         accent-color: var(--color-accent);
     }
 
-    .slot-slider:disabled {
-        opacity: 0.35;
-        cursor: default;
-    }
-
     .slider-bounds {
         display: flex;
         justify-content: space-between;
@@ -470,14 +461,9 @@
         transition: background 0.15s, border-color 0.15s;
     }
 
-    .regen-btn:hover:not(:disabled) {
+    .regen-btn:hover {
         background: var(--color-accent-dim);
         border-color: var(--color-accent);
-    }
-
-    .regen-btn:disabled {
-        opacity: 0.4;
-        cursor: default;
     }
 
     /* ── Custom constraints ──────────────────────────────────────────────────── */
