@@ -5,12 +5,14 @@ use crate::{Routine, preprocessing::ProblemInfo, randomize::Randomizer};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Score {
     pub num_dist_1: usize,
+    pub clamped_intermission_mid: usize, // max(0, intermission_middle_dist - intermission_tolerance)
     pub num_dist_2: usize,
     pub intermission_middle_dist: usize,
 }
 
 impl Score {
-    pub const PERFECT: Self = Self { num_dist_1: 0, num_dist_2: 0, intermission_middle_dist: 0 };
+    pub const PERFECT: Self =
+        Self { num_dist_1: 0, clamped_intermission_mid: 0, num_dist_2: 0, intermission_middle_dist: 0 };
 }
 
 /// A candidate solution to the problem.
@@ -49,8 +51,8 @@ impl<'a> Solution<'a> {
         let n = self.order.len();
         debug_assert!(i < j && j < n);
 
-        let i = i as isize;
-        let j = j as isize;
+        let is = i as isize;
+        let js = j as isize;
 
         // Check if the mutation decreases `num_dist_1`.
         let get_num_dist_1 = |i1: isize, i2: isize| {
@@ -60,10 +62,26 @@ impl<'a> Solution<'a> {
                 0
             }
         };
-        let old_num_dist_1 = get_num_dist_1(i - 1, i) + get_num_dist_1(j, j + 1);
-        let new_num_dist_1 = get_num_dist_1(i - 1, j) + get_num_dist_1(i, j + 1);
+        let old_num_dist_1 = get_num_dist_1(is - 1, is) + get_num_dist_1(js, js + 1);
+        let new_num_dist_1 = get_num_dist_1(is - 1, js) + get_num_dist_1(is, js + 1);
 
         let mut ord = new_num_dist_1.cmp(&old_num_dist_1);
+        if ord == Greater {
+            return false;
+        }
+
+        // Check if the mutation improves `clamped_intermission_mid` (cheap, so checked before num_dist_2).
+        let new_intermission_index = if (i..=j).contains(&self.intermission_index) {
+            // Intermission is within the reversed segment.
+            i + (j - self.intermission_index)
+        } else {
+            self.intermission_index
+        };
+        let new_intermission_middle_dist = get_middle_dist(n, new_intermission_index);
+        let new_clamped_intermission_mid =
+            new_intermission_middle_dist.saturating_sub(self.problem_info.intermission_tolerance());
+
+        ord = ord.then(new_clamped_intermission_mid.cmp(&self.score.clamped_intermission_mid));
         if ord == Greater {
             return false;
         }
@@ -76,25 +94,13 @@ impl<'a> Solution<'a> {
         let get_num_dist_2 = |i1: isize, i2: isize, i3: isize, i4: isize| {
             get_num_dist_2_triple(i1, i2, i3) + get_num_dist_2_triple(i2, i3, i4)
         };
-        let old_num_dist_2 = get_num_dist_2(i - 2, i - 1, i, i + 1) + get_num_dist_2(j - 1, j, j + 1, j + 2);
-        let new_num_dist_2 = get_num_dist_2(i - 2, i - 1, j, j - 1) + get_num_dist_2(i + 1, i, j + 1, j + 2);
+        let old_num_dist_2 = get_num_dist_2(is - 2, is - 1, is, is + 1) + get_num_dist_2(js - 1, js, js + 1, js + 2);
+        let new_num_dist_2 = get_num_dist_2(is - 2, is - 1, js, js - 1) + get_num_dist_2(is + 1, is, js + 1, js + 2);
 
         ord = ord.then(new_num_dist_2.cmp(&old_num_dist_2));
         if ord == Greater {
             return false;
         }
-
-        let i = i as usize;
-        let j = j as usize;
-
-        // Check if the mutation improves `intermission_middle_dist`.
-        let new_intermission_index = if (i..=j).contains(&self.intermission_index) {
-            // Intermission is within the reversed segment.
-            i + (j - self.intermission_index)
-        } else {
-            self.intermission_index
-        };
-        let new_intermission_middle_dist = get_middle_dist(n, new_intermission_index);
 
         ord = ord.then(new_intermission_middle_dist.cmp(&self.score.intermission_middle_dist));
         if ord != Less {
@@ -106,6 +112,7 @@ impl<'a> Solution<'a> {
         self.intermission_index = new_intermission_index;
         self.score = Score {
             num_dist_1: self.score.num_dist_1 + new_num_dist_1 - old_num_dist_1,
+            clamped_intermission_mid: new_clamped_intermission_mid,
             num_dist_2: self.score.num_dist_2 + new_num_dist_2 - old_num_dist_2,
             intermission_middle_dist: new_intermission_middle_dist,
         };
@@ -113,8 +120,13 @@ impl<'a> Solution<'a> {
     }
 }
 
-pub fn optimize_order(routines: &[Routine], num_slots: usize, num_iterations: u32) -> (Box<[usize]>, Score) {
-    let problem_info = ProblemInfo::new(routines, num_slots);
+pub fn optimize_order(
+    routines: &[Routine],
+    num_slots: usize,
+    intermission_tolerance: usize,
+    num_iterations: u32,
+) -> (Box<[usize]>, Score) {
+    let problem_info = ProblemInfo::new(routines, num_slots, intermission_tolerance);
 
     let mut randomizer = Randomizer::new(&problem_info, rand::rng());
 
@@ -140,11 +152,12 @@ pub fn optimize_order(routines: &[Routine], num_slots: usize, num_iterations: u3
 pub fn optimize_order_streaming<F: FnMut(&[usize], Score)>(
     routines: &[Routine],
     num_slots: usize,
+    intermission_tolerance: usize,
     mut on_improvement: F,
 ) {
     const NO_IMPROVEMENT_TIMEOUT_MS: f64 = 5_000.0;
 
-    let problem_info = ProblemInfo::new(routines, num_slots);
+    let problem_info = ProblemInfo::new(routines, num_slots, intermission_tolerance);
     let mut randomizer = Randomizer::new(&problem_info, rand::rng());
 
     let mut solution = Solution::new(&problem_info, &mut randomizer);
@@ -232,8 +245,9 @@ fn score_order(problem_info: &ProblemInfo, order: &[usize]) -> Score {
 
     let intermission_index = problem_info.intermission_index_in_order(order);
     let intermission_middle_dist = get_middle_dist(n, intermission_index);
+    let clamped_intermission_mid = intermission_middle_dist.saturating_sub(problem_info.intermission_tolerance());
 
-    Score { num_dist_1, num_dist_2, intermission_middle_dist }
+    Score { num_dist_1, clamped_intermission_mid, num_dist_2, intermission_middle_dist }
 }
 
 fn get_middle_dist(n: usize, index: usize) -> usize {

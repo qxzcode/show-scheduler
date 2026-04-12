@@ -21,6 +21,7 @@
     let csvText = $state("");
     let fileName = $state("");
     let numSlots = $state(32);
+    let intermissionTolerance = $state(2);
     let dragOver = $state(false);
 
     // ── Alias map: alias → canonical ─────────────────────────────────────────
@@ -129,6 +130,8 @@
         else if (numSlots > max) numSlots = max;
     });
 
+    let maxIntermissionTolerance = $derived(Math.floor(slotRange.max / 2));
+
     function normalizeCsv(csv: string, aliases: Map<string, string>): string {
         if (!csv.trim()) return csv;
         return csv
@@ -151,6 +154,7 @@
     $effect(() => {
         const csv = normalizedCsv;
         const ns = numSlots;
+        const it = intermissionTolerance;
         if (!csv.trim()) {
             worker?.terminate();
             worker = null;
@@ -161,10 +165,10 @@
             status = "";
             return;
         }
-        startOptimizer(csv, ns);
+        startOptimizer(csv, ns, it);
     });
 
-    function startOptimizer(csv: string, ns: number) {
+    function startOptimizer(csv: string, ns: number, it: number) {
         worker?.terminate();
 
         running = true;
@@ -205,7 +209,7 @@
             worker = null;
         };
 
-        worker.postMessage({ csvText: csv.trim(), numSlots: ns });
+        worker.postMessage({ csvText: csv.trim(), numSlots: ns, intermissionTolerance: it });
     }
 
     // ── Obvious auto-merges ───────────────────────────────────────────────────
@@ -319,6 +323,8 @@
                     bind:numSlots
                     minSlots={slotRange.min}
                     maxSlots={slotRange.max}
+                    bind:intermissionTolerance
+                    {maxIntermissionTolerance}
                     {status}
                     {score}
                     {running}
@@ -355,6 +361,8 @@
             bind:numSlots
             minSlots={slotRange.min}
             maxSlots={slotRange.max}
+            bind:intermissionTolerance
+            {maxIntermissionTolerance}
             {status}
             {score}
             {running}

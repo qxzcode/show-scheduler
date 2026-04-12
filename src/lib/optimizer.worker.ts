@@ -2,12 +2,12 @@ import init, { parse_csv, optimize_streaming } from '$lib/wasm/show_scheduler.js
 
 const wasmReady = init();
 
-self.onmessage = async (e: MessageEvent<{ csvText: string; numSlots: number }>) => {
-    const { csvText, numSlots } = e.data;
+self.onmessage = async (e: MessageEvent<{ csvText: string; numSlots: number; intermissionTolerance: number }>) => {
+    const { csvText, numSlots, intermissionTolerance } = e.data;
     try {
         await wasmReady;
         const routinesJson = parse_csv(csvText);
-        optimize_streaming(routinesJson, numSlots, (resultJson: string) => {
+        optimize_streaming(routinesJson, numSlots, intermissionTolerance, (resultJson: string) => {
             self.postMessage({ type: 'progress', resultJson });
         });
         self.postMessage({ type: 'done' });

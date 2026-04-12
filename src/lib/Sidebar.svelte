@@ -4,6 +4,8 @@
         numSlots: number;
         minSlots: number;
         maxSlots: number;
+        intermissionTolerance: number;
+        maxIntermissionTolerance: number;
         status: string;
         score: string;
         running: boolean;
@@ -19,6 +21,8 @@
         numSlots = $bindable(),
         minSlots,
         maxSlots,
+        intermissionTolerance = $bindable(),
+        maxIntermissionTolerance,
         status,
         score,
         running,
@@ -91,6 +95,29 @@
             <div class="slider-bounds">
                 <span>{minSlots}</span>
                 <span>{maxSlots}</span>
+            </div>
+        {/if}
+    </section>
+
+    <section class="sidebar-section">
+        <label class="field-label" for="intermission-tolerance">
+            Intermission tolerance
+            {#if fileName}<span class="slot-value">{intermissionTolerance}</span>{/if}
+        </label>
+        <input
+            class="slot-slider"
+            type="range"
+            id="intermission-tolerance"
+            min="0"
+            max={maxIntermissionTolerance}
+            step="1"
+            disabled={!fileName}
+            bind:value={intermissionTolerance}
+        />
+        {#if fileName}
+            <div class="slider-bounds">
+                <span>strict</span>
+                <span>loose</span>
             </div>
         {/if}
     </section>

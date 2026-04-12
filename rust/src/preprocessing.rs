@@ -27,6 +27,7 @@ impl MetaRoutine {
 #[derive(Clone, Debug)]
 pub struct ProblemInfo {
     num_slots: usize,
+    intermission_tolerance: usize,
     routines: Box<[Routine]>,
     meta_routines: Box<[MetaRoutine]>,
     non_doubleable_mr_indices: Box<[usize]>,
@@ -37,7 +38,7 @@ pub struct ProblemInfo {
 }
 
 impl ProblemInfo {
-    pub fn new(routines: &[Routine], num_slots: usize) -> Self {
+    pub fn new(routines: &[Routine], num_slots: usize, intermission_tolerance: usize) -> Self {
         let mut meta_routines = Vec::new();
         meta_routines.extend((0..routines.len()).map(MetaRoutine::Single)); // All single routines.
         for i in 0..routines.len() {
@@ -114,6 +115,7 @@ impl ProblemInfo {
 
         Self {
             num_slots,
+            intermission_tolerance,
             routines: routines.into(),
             non_doubleable_mr_indices,
             doubleable_mr_indices,
@@ -127,6 +129,11 @@ impl ProblemInfo {
     /// Returns the number of time slots that the routines must be scheduled into (including the intermission).
     pub fn num_slots(&self) -> usize {
         self.num_slots
+    }
+
+    /// Returns how many slots away from the center intermission is allowed to be before it counts against the score.
+    pub fn intermission_tolerance(&self) -> usize {
+        self.intermission_tolerance
     }
 
     /// Returns the ordered list of routines in the problem.
