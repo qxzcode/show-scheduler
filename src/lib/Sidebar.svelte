@@ -148,6 +148,11 @@
             <label class="field-label" for="intermission-tolerance">
                 Intermission tolerance
                 <span class="slot-value">{intermissionTolerance}</span>
+                <span
+                    class="info-icon"
+                    title="How far off-center intermission is allowed to be (in slots). Lower = must stay near the middle of the show; higher = more flexibility, which can help reduce performer conflicts."
+                    aria-label="About intermission tolerance"
+                >ⓘ</span>
             </label>
             <input
                 class="slot-slider"
@@ -388,6 +393,16 @@
         margin-left: 0.4rem;
         text-transform: none;
         letter-spacing: 0;
+    }
+
+    .info-icon {
+        font-size: 0.75rem;
+        font-weight: 400;
+        color: var(--color-text-faint);
+        text-transform: none;
+        letter-spacing: 0;
+        margin-left: 0.3rem;
+        cursor: help;
     }
 
     .slot-slider {
