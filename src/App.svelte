@@ -79,6 +79,37 @@
             .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015]/g, "-");  // dash variants
     }
 
+    // ── CSV field parsing (RFC 4180 quoted fields) ────────────────────────────
+    function parseCSVLine(line: string): string[] {
+        const fields: string[] = [];
+        let i = 0;
+        while (i < line.length) {
+            if (line[i] === '"') {
+                // Quoted field: read until closing unescaped quote
+                let field = '';
+                i++; // skip opening quote
+                while (i < line.length) {
+                    if (line[i] === '"') {
+                        if (line[i + 1] === '"') { field += '"'; i += 2; } // escaped quote
+                        else { i++; break; }                               // closing quote
+                    } else {
+                        field += line[i++];
+                    }
+                }
+                fields.push(field);
+                if (line[i] === ',') i++; // skip delimiter
+            } else {
+                // Unquoted field
+                const end = line.indexOf(',', i);
+                if (end === -1) { fields.push(line.slice(i)); break; }
+                fields.push(line.slice(i, end));
+                i = end + 1;
+            }
+        }
+        if (line.endsWith(',')) fields.push(''); // trailing empty field
+        return fields;
+    }
+
     // ── Derived: performer → routines map (normalized via aliasMap) ───────────
     let performerRoutines = $derived(buildPerformerRoutines(csvText, aliasMap));
 
@@ -86,12 +117,12 @@
         const map = new Map<string, Set<string>>();
         if (!csv.trim()) return map;
         const lines = csv.trim().split(/\r?\n/);
-        const header = lines[0]?.split(",").map(normalizeName) ?? [];
+        const header = lines[0] ? parseCSVLine(lines[0]).map(normalizeName) : [];
         for (let col = 0; col < header.length; col++) {
             const routineName = header[col];
             if (!routineName || routineName === "[Intermission]") continue;
             for (let row = 1; row < lines.length; row++) {
-                const cells = lines[row].split(",");
+                const cells = parseCSVLine(lines[row]);
                 const raw = normalizeName(cells[col] ?? "");
                 if (!raw) continue;
                 const canonical = aliases.get(raw) ?? raw;
@@ -111,16 +142,16 @@
     function computeSlotRange(csv: string): { min: number; max: number } {
         if (!csv.trim()) return { min: 1, max: 100 };
         const lines = csv.trim().split(/\r?\n/);
-        const header = lines[0]?.split(",").map(s => s.trim()) ?? [];
+        const header = lines[0] ? parseCSVLine(lines[0]).map(s => s.trim()) : [];
         // +1 for the [Intermission] automatically appended by parse_csv
         const totalRoutines = header.filter(Boolean).length + 1;
+        const dataRows = lines.slice(1).map(l => parseCSVLine(l).map(s => s.trim()));
         let doubleableCount = 0;
         for (let col = 0; col < header.length; col++) {
             if (!header[col]) continue;
             let dancerCount = 0;
-            for (let row = 1; row < lines.length; row++) {
-                const cell = lines[row].split(",")[col]?.trim();
-                if (cell) dancerCount++;
+            for (const cells of dataRows) {
+                if (cells[col]) dancerCount++;
             }
             if (dancerCount >= 1 && dancerCount <= 2) doubleableCount++;
         }
@@ -143,8 +174,7 @@
             .trim()
             .split(/\r?\n/)
             .map((line, i) => {
-                return line
-                    .split(",")
+                return parseCSVLine(line)
                     .map((cell, col) => {
                         const name = normalizeName(cell);
                         if (i === 0) return name; // header: just normalize
@@ -232,7 +262,7 @@
         const allNames = new Set<string>();
 
         for (const line of lines) {
-            for (const cell of line.split(",")) {
+            for (const cell of parseCSVLine(line)) {
                 const name = normalizeName(cell);
                 if (name) allNames.add(name);
             }
