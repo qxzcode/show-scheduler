@@ -470,6 +470,10 @@
         border-bottom: none;
     }
 
+    .performers-table tbody tr:hover td {
+        background: color-mix(in srgb, var(--color-surface) 50%, transparent);
+    }
+
     .performer-name {
         color: var(--color-text);
         white-space: nowrap;
