@@ -1,42 +1,23 @@
-# sv
+# Show Scheduler
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+**It's live here:** https://qxzcode.github.io/show-scheduler/
 
-## Creating a project
+A browser-based tool for finding a good act order for dance shows. It minimizes the number of performers with back-to-back routines (no time to change costume), while keeping intermission near the middle of the show.
 
-If you're seeing this, you've probably already done this step. Congrats!
+The tool is a single static webpage; everything runs locally in your browser.
 
-```sh
-# create a new project
-npx sv create my-app
-```
+## How it works
 
-To recreate this project with the same configuration:
+The core schedule optimization algorithm is implemented in Rust and compiled to WASM. It uses hill-climbing local search with random restarts. After the user sets up the problem, the optimizer runs in a background worker and streams solutions (concrete schedules) to the UI as it finds improvements.
 
-```sh
-# recreate this project
-bun x sv@0.15.1 create --template minimal --types ts --install bun show-scheduler
-```
+I experimented extensively with more "sophisticated" discrete optimization solvers, including CP-SAT, Hexaly, and SCIP – but ultimately my pure-Rust local search implementation is both faster to find good solutions (fast enough to interactively play with the parameters in the UI!) and also simpler to embed in a static page.
 
-## Developing
+## Running locally
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+Make sure you have [just](https://github.com/casey/just), [bun](https://bun.sh), and [wasm-pack](https://wasm-bindgen.github.io/wasm-pack/) installed.
 
 ```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+just dev      # install deps, build wasm, and start dev server with hot reload
+just build    # production build (wasm + vite + prerender)
+just preview  # production build + start preview server
 ```
-
-## Building
-
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
