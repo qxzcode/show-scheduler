@@ -142,6 +142,9 @@ function buildComponent(sourcePath) {
     // Strip imports and export; eval the rest as a factory function
     code = code.replace(/^import\s+.*$/gm, '');
     code = code.replace(/^export default\s+/m, '');
+    // import.meta is unavailable in new Function() (non-module context); stub it out.
+    // These expressions are only reached at runtime (e.g. click handlers), never during SSR render.
+    code = code.replace(/import\.meta\.env/g, '({BASE_URL:"/",MODE:"production",DEV:false,PROD:true,SSR:false})');
     const nameMatch = code.match(/(?:function|class|const)\s+(\w+)/);
     const componentName = nameMatch?.[1] ?? 'default';
 
