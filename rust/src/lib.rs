@@ -175,13 +175,11 @@ fn conflict_groups(
     problem_info.meta_routines()[mr_index]
         .routine_indices()
         .filter_map(|ri| {
-            let mut dancers: Vec<String> = routines[ri]
-                .dancers
-                .iter()
-                .filter(|d| dancers0.contains(d))
-                .cloned()
-                .collect();
-            if dancers.is_empty() { return None; }
+            let mut dancers: Vec<String> =
+                routines[ri].dancers.iter().filter(|d| dancers0.contains(d)).cloned().collect();
+            if dancers.is_empty() {
+                return None;
+            }
             dancers.sort();
             Some(ConflictGroup { routine: routines[ri].name.clone(), dancers })
         })

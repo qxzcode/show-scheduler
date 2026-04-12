@@ -19,7 +19,7 @@
         new Map([...performerRoutines.entries()].map(([name, routines]) => [name, routines.size]))
     );
 
-    let suggestions = $derived(suggestMerges(routineCounts));
+    let suggestions = $derived(suggestMerges(routineCounts, performerRoutines));
 
     let visibleSuggestions = $derived(
         suggestions.filter(s => !dismissedSuggestions.has(suggestionKey(s)))

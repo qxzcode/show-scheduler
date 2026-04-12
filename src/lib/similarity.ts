@@ -49,9 +49,11 @@ export interface SuggestedMerge {
  * Given a map of name → routine-count, find pairs whose Jaro-Winkler
  * similarity exceeds `threshold` and return them as merge suggestions.
  * Names that differ only in case are always grouped.
+ * Pairs that appear in the same routine are never suggested (they must be different people).
  */
 export function suggestMerges(
     routineCounts: Map<string, number>,
+    performerRoutines: Map<string, Set<string>>,
     threshold = 0.88,
 ): SuggestedMerge[] {
     const names = [...routineCounts.keys()];
@@ -69,6 +71,10 @@ export function suggestMerges(
         for (let j = i + 1; j < n; j++) {
             const ai = names[i].toLowerCase(), bj = names[j].toLowerCase();
             if (ai === bj || jaroWinkler(ai, bj) >= threshold) {
+                // If they share a routine they are definitely different people — skip.
+                const ri = performerRoutines.get(names[i]);
+                const rj = performerRoutines.get(names[j]);
+                if (ri && rj && [...ri].some(r => rj.has(r))) continue;
                 union(i, j);
             }
         }
