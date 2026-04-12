@@ -82,6 +82,8 @@
         onConstraintsChange(customConstraints.map(c => (c.id === id ? updated : c)));
     }
 
+    let aboutOpen = $state(false);
+
     function onFileInput(e: Event) {
         const file = (e.target as HTMLInputElement).files?.[0];
         if (file) onFile(file);
@@ -283,7 +285,56 @@
             </button>
         </section>
     {/if}
+
+    <div class="sidebar-footer">
+        <button class="footer-link" onclick={() => aboutOpen = true}>About</button>
+        <span class="footer-sep">·</span>
+        <a
+            class="footer-github"
+            href="https://github.com/qxzcode/show-scheduler"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub repository"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 98 98" fill="currentColor" aria-hidden="true">
+                <path d="m41.4 69.4c-1.1.9-2.4 2.4-4 4-2.2 2.2-3.7 3.1-6.1 3.1s-4.4-1.3-6.3-4.1c-2.5-3.5-4.9-5.2-7.7-5.2-1.9 0-3.8.8-3.8 2 0 .6.4 1 1.5 1.1 2.2.3 3.4 1.9 4.4 4.4 2.7 6.5 6.4 9.9 12.8 9.9 1.5 0 3.2-.4 4.6-1v7.7c0 2.6-2.5 4.3-5.1 3.4C13.5 88 0 70.4 0 49.2 0 22.1 21.8 0 48.9 0S98 22.1 98 49.2c0 21.4-13.6 38.8-30.9 45.4-2.9 1.1-5.3-.5-5.3-3.4v-9.9c0-5.3-2.2-9.9-5.4-12C69.2 67.7 78.1 58.8 78.1 47c0-5-1.6-9.9-4.7-13.5 1.2-3.3 1.1-10-.3-12.5-3.8-.5-9.1 1.5-12 4.2-3.5-1.1-7.3-1.7-12-1.7-4.7 0-8.5.6-12.2 1.8-3-2.8-8.2-4.8-12-4.3-1.5 2.7-1.6 9.4-.4 12.6-2.9 3.4-4.6 8.6-4.6 13.4 0 11.8 8.9 20.9 21.5 22.4z" />
+            </svg>
+        </a>
+    </div>
 </div>
+
+<svelte:window onkeydown={(e) => e.key === 'Escape' && aboutOpen && (aboutOpen = false)} />
+
+{#if aboutOpen}
+    <div
+        class="about-backdrop"
+        role="dialog"
+        tabindex="-1"
+        aria-modal="true"
+        aria-label="About Show Scheduler"
+        onclick={(e) => { if (e.target === e.currentTarget) aboutOpen = false; }}
+        onkeydown={(e) => e.key === 'Escape' && (aboutOpen = false)}
+    >
+        <div class="about-dialog">
+            <button class="about-close" onclick={() => aboutOpen = false} aria-label="Close">✕</button>
+            <h2>Show Scheduler</h2>
+            <p>
+                This is a tool for building schedules for dance shows, created by Quinn&nbsp;Tucker for a club at RIT. Given a collection of routines to be performed, with some performers participating in multiple routines, it finds a routine order that:
+            </p>
+            <ul>
+                <li>Minimizes the number of performers with back-to-back routines (no time to change costume).</li>
+                <li>Keeps intermission near the middle of the show.</li>
+                <li>Respects other custom constraints, such as putting a specific routine directly after another specific routine.</li>
+            </ul>
+            <p>
+                Fun fact: I hate bloated websites! This entire app is a single ~100 KB static Svelte page. The core optimization algorithm is implemented in Rust and compiled to WebAssembly, running entirely in your browser. No data is uploaded to any server.
+            </p>
+            <p>
+                View the source or report an issue on <a href="https://github.com/qxzcode/show-scheduler" target="_blank" rel="noopener noreferrer">GitHub</a>.
+            </p>
+        </div>
+    </div>
+{/if}
 
 <style>
     .sidebar {
@@ -304,6 +355,7 @@
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
+        flex: 1;
     }
 
     .sidebar-logo {
@@ -600,5 +652,116 @@
     .add-constraint-btn:hover {
         border-color: var(--color-accent);
         color: var(--color-accent-light);
+    }
+
+    /* ── Sidebar footer ──────────────────────────────────────────────────────── */
+
+    .sidebar-footer {
+        margin-top: auto;
+        padding-top: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        font-size: 0.75rem;
+        color: var(--color-text-faint);
+    }
+
+    .footer-link {
+        background: none;
+        border: none;
+        padding: 0;
+        font-size: 0.75rem;
+        color: var(--color-text-faint);
+        cursor: pointer;
+    }
+
+    .footer-link:hover {
+        color: var(--color-accent-light);
+    }
+
+    .footer-sep {
+        user-select: none;
+    }
+
+    .footer-github {
+        display: flex;
+        align-items: center;
+        color: var(--color-text-faint);
+        line-height: 1;
+    }
+
+    .footer-github:hover {
+        color: var(--color-accent-light);
+    }
+
+    /* ── About dialog ────────────────────────────────────────────────────────── */
+
+    .about-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+    }
+
+    .about-dialog {
+        position: relative;
+        background: var(--color-panel);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius-sm);
+        padding: 1.5rem 1.75rem;
+        max-width: 30rem;
+        width: calc(100% - 2rem);
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    .about-close {
+        position: absolute;
+        top: 0.6rem;
+        right: 0.75rem;
+        background: none;
+        border: none;
+        color: var(--color-text-faint);
+        font-size: 0.85rem;
+        cursor: pointer;
+        padding: 0.2rem 0.3rem;
+        line-height: 1;
+    }
+
+    .about-close:hover {
+        color: var(--color-text);
+    }
+
+    .about-dialog h2 {
+        margin: 0 0 0.75rem;
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--color-accent-light);
+        letter-spacing: 0.02em;
+    }
+
+    .about-dialog * {
+        font-size: 0.85rem;
+        color: var(--color-text-muted);
+        line-height: 1.6;
+    }
+
+    .about-dialog *:last-child {
+        margin-bottom: 0;
+    }
+
+    .about-dialog * a {
+        color: var(--color-accent-light);
+        text-decoration: underline;
+        text-underline-offset: 0.15em;
+    }
+
+    .about-dialog * a:hover {
+        color: var(--color-text);
     }
 </style>

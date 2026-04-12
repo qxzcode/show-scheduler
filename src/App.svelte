@@ -635,11 +635,16 @@
         flex: 1;
         position: static;
         overflow: visible;
+        display: flex;
+        flex-direction: column;
     }
 
     .app-shell--mobile .tab-panel {
         position: static;
         overflow: visible;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
     }
 
     .app-shell--mobile .tab-hidden {
