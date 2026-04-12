@@ -5,11 +5,16 @@
     import ScheduleTab from "$lib/ScheduleTab.svelte";
     import NoFile from "$lib/NoFile.svelte";
 
+    interface ConflictGroup {
+        routine: string;
+        dancers: string[];
+    }
+
     interface SlotResult {
         slot_number: number;
         routines: string[];
-        dist1_conflicts: string[];
-        dist2_conflicts: string[];
+        dist1_conflicts: ConflictGroup[];
+        dist2_conflicts: ConflictGroup[];
     }
 
     interface OptimizeResult {

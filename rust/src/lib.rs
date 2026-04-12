@@ -38,12 +38,19 @@ pub fn main() {
 
 // ── Serialization types ────────────────────────────────────────────────────
 
+/// Dancers in a specific routine who conflict with the current slot.
+#[derive(Serialize, Deserialize)]
+struct ConflictGroup {
+    routine: String,
+    dancers: Vec<String>,
+}
+
 #[derive(Serialize, Deserialize)]
 struct SlotResult {
     slot_number: usize,
     routines: Vec<String>,
-    dist1_conflicts: Vec<String>,
-    dist2_conflicts: Vec<String>,
+    dist1_conflicts: Vec<ConflictGroup>,
+    dist2_conflicts: Vec<ConflictGroup>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -157,6 +164,30 @@ fn do_parse_csv(csv: &str) -> Result<Vec<Routine>, String> {
     Ok(routines)
 }
 
+fn conflict_groups(
+    dancers0: &HashSet<&String>,
+    mr_index: usize,
+    problem_info: &preprocessing::ProblemInfo,
+    routines: &[Routine],
+) -> Vec<ConflictGroup> {
+    // For each individual routine in the given meta-routine, collect the dancers
+    // who appear in both that routine and dancers0.
+    problem_info.meta_routines()[mr_index]
+        .routine_indices()
+        .filter_map(|ri| {
+            let mut dancers: Vec<String> = routines[ri]
+                .dancers
+                .iter()
+                .filter(|d| dancers0.contains(d))
+                .cloned()
+                .collect();
+            if dancers.is_empty() { return None; }
+            dancers.sort();
+            Some(ConflictGroup { routine: routines[ri].name.clone(), dancers })
+        })
+        .collect()
+}
+
 fn build_slot_results(
     order: &[usize],
     problem_info: &preprocessing::ProblemInfo,
@@ -172,24 +203,14 @@ fn build_slot_results(
 
             let dist1_conflicts = order
                 .get(pos + 1)
-                .map(|&next| {
-                    let dancers1: HashSet<&String> = problem_info.meta_routines()[next].dancers(routines).collect();
-                    let mut v: Vec<String> = dancers0.intersection(&dancers1).map(|s| (*s).clone()).collect();
-                    v.sort();
-                    v
-                })
+                .map(|&next| conflict_groups(&dancers0, next, problem_info, routines))
                 .unwrap_or_default();
 
             let dist2_conflicts = order
                 .get(pos + 1)
                 .filter(|&&next| next != problem_info.intermission_index())
                 .and_then(|_| order.get(pos + 2))
-                .map(|&next2| {
-                    let dancers2: HashSet<&String> = problem_info.meta_routines()[next2].dancers(routines).collect();
-                    let mut v: Vec<String> = dancers0.intersection(&dancers2).map(|s| (*s).clone()).collect();
-                    v.sort();
-                    v
-                })
+                .map(|&next2| conflict_groups(&dancers0, next2, problem_info, routines))
                 .unwrap_or_default();
 
             SlotResult { slot_number: pos + 1, routines: routine_names, dist1_conflicts, dist2_conflicts }

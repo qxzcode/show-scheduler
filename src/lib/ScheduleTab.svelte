@@ -1,11 +1,16 @@
 <script lang="ts">
     import NoFile from "./NoFile.svelte";
 
+    interface ConflictGroup {
+        routine: string;
+        dancers: string[];
+    }
+
     interface SlotResult {
         slot_number: number;
         routines: string[];
-        dist1_conflicts: string[];
-        dist2_conflicts: string[];
+        dist1_conflicts: ConflictGroup[];
+        dist2_conflicts: ConflictGroup[];
     }
 
     interface Props {
@@ -15,6 +20,16 @@
     }
 
     let { slots, hasStarted, error }: Props = $props();
+
+    function formatNames(names: string[]): string {
+        if (names.length === 1) return names[0];
+        if (names.length === 2) return `${names[0]} and ${names[1]}`;
+        return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+    }
+
+    function isAre(names: string[]): string {
+        return names.length === 1 ? "is" : "are";
+    }
 </script>
 
 <div class="schedule-tab">
@@ -37,8 +52,7 @@
                 <tr>
                     <th class="col-slot">#</th>
                     <th class="col-routines">Routine(s)</th>
-                    <th class="col-conflicts">Distance-1 conflicts</th>
-                    <th class="col-conflicts">Distance-2 conflicts</th>
+                    <th class="col-conflicts">Conflicts</th>
                 </tr>
             </thead>
             <tbody>
@@ -50,14 +64,12 @@
                         <td class="col-slot">{slot.slot_number}</td>
                         <td class="col-routines">{slot.routines.join(" + ")}</td>
                         <td class="col-conflicts">
-                            {#if hasDist1}
-                                <span class="conflict-names dist1">{slot.dist1_conflicts.join(", ")}</span>
-                            {/if}
-                        </td>
-                        <td class="col-conflicts">
-                            {#if hasDist2}
-                                <span class="conflict-names dist2">{slot.dist2_conflicts.join(", ")}</span>
-                            {/if}
+                            {#each slot.dist1_conflicts as group}
+                                <span class="conflict-names dist1"><strong>{formatNames(group.dancers)}</strong> {isAre(group.dancers)} also in <strong>{group.routine}</strong>.</span>
+                            {/each}
+                            {#each slot.dist2_conflicts as group}
+                                <span class="conflict-names dist2"><strong>{formatNames(group.dancers)}</strong> {isAre(group.dancers)} also in <strong>{group.routine}</strong>.</span>
+                            {/each}
                         </td>
                     </tr>
                 {/each}
@@ -141,11 +153,19 @@
     }
 
     .col-routines {
+        width: 1%;
+        white-space: nowrap;
         font-weight: 500;
+        padding-right: 1.5rem;
     }
 
     .col-conflicts {
-        width: 30%;
+        /* fills remaining width */
+    }
+
+    .col-conflicts .conflict-names + .conflict-names {
+        display: block;
+        margin-top: 0.2rem;
     }
 
     .row-intermission td {
