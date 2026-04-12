@@ -7,7 +7,7 @@
         intermissionTolerance: number;
         maxIntermissionTolerance: number;
         status: string;
-        score: string;
+        score: { d1: number; d2: number; mid: number } | null;
         running: boolean;
         dragOver: boolean;
         variant?: 'sidebar' | 'tab';
@@ -130,9 +130,14 @@
 
     {#if score}
         <section class="sidebar-section score-section">
-            {#each score.split(", ") as part}
-                <p class="score-line">{part}</p>
-            {/each}
+            <p class="score-label">Performers in adjacent routines</p>
+            <p class="score-value" class:score-bad={score.d1 > 0}>{score.d1}</p>
+            <p class="score-label">Performers with one-routine turnarounds</p>
+            <p class="score-value" class:score-warn={score.d2 > 0}>{score.d2}</p>
+            <p class="score-label">Intermission distance from center</p>
+            <p class="score-value" class:score-warn={score.mid > intermissionTolerance}>
+                {score.mid === 0 ? "Centered" : `${score.mid} slot${score.mid === 1 ? "" : "s"} off`}
+            </p>
         </section>
     {/if}
 </div>
@@ -289,10 +294,24 @@
         padding: 0.6rem 0.75rem;
     }
 
-    .score-line {
-        margin: 0;
-        font-size: 0.8rem;
-        color: var(--color-text-muted);
-        line-height: 1.6;
+    .score-label {
+        margin: 0.5rem 0 0.1rem;
+        font-size: 0.7rem;
+        color: var(--color-text-faint);
+        line-height: 1.4;
     }
+
+    .score-label:first-child {
+        margin-top: 0;
+    }
+
+    .score-value {
+        margin: 0;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--color-text);
+    }
+
+    .score-value.score-bad { color: var(--color-danger); }
+    .score-value.score-warn { color: var(--color-warning); }
 </style>

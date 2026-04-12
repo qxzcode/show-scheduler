@@ -35,7 +35,7 @@
 
     // ── Optimizer state ───────────────────────────────────────────────────────
     let slots = $state<SlotResult[]>([]);
-    let score = $state("");
+    let score = $state<{ d1: number; d2: number; mid: number } | null>(null);
     let status = $state("");
     let error = $state("");
     let running = $state(false);
@@ -166,7 +166,7 @@
             running = false;
             hasStarted = false;
             slots = [];
-            score = "";
+            score = null;
             status = "";
             return;
         }
@@ -189,7 +189,7 @@
             if (e.data.type === "progress") {
                 const result: OptimizeResult = JSON.parse(e.data.resultJson);
                 const [d1, d2, mid] = result.score;
-                score = `d1: ${d1}, d2: ${d2}, mid: ${mid}`;
+                score = { d1, d2, mid };
                 slots = result.slots;
                 status = "Optimizing…";
                 if (activeTab !== "schedule") scheduleHasNewResult = true;
