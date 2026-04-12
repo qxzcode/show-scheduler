@@ -252,9 +252,10 @@
         score = null;
         error = "";
 
-        worker = new OptimizerWorker();
+        const w = new OptimizerWorker();
+        worker = w;
 
-        worker.onmessage = (e: MessageEvent) => {
+        w.onmessage = (e: MessageEvent) => {
             if (e.data.type === "progress") {
                 const result: OptimizeResult = JSON.parse(e.data.resultJson);
                 const [d1, d2, mid] = result.score;
@@ -275,7 +276,7 @@
             }
         };
 
-        worker.onerror = (e) => {
+        w.onerror = (e) => {
             running = false;
             status = "Error.";
             error = e.message ?? "Unknown worker error.";
@@ -283,7 +284,7 @@
             worker = null;
         };
 
-        worker.postMessage({
+        w.postMessage({
             csvText: csv.trim(),
             numSlots: ns,
             intermissionTolerance: it,

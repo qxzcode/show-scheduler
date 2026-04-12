@@ -206,10 +206,6 @@
         padding-right: 1.5rem;
     }
 
-    .col-conflicts {
-        /* fills remaining width */
-    }
-
     .col-conflicts .conflict-names + .conflict-names {
         display: block;
         margin-top: 0.2rem;

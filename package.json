@@ -6,11 +6,12 @@
     "scripts": {
         "dev": "wasm-pack build --dev --target web --out-dir ../src/lib/wasm rust && vite dev",
         "build": "wasm-pack build --release --target web --out-dir ../src/lib/wasm rust && vite build && node scripts/prerender.js",
-        "check": "svelte-check",
+        "check": "svelte-check --fail-on-warnings",
         "preview": "vite preview"
     },
     "devDependencies": {
         "@sveltejs/vite-plugin-svelte": "^7.0.0",
+        "@types/node": "^25.6.0",
         "svelte": "^5.55.2",
         "svelte-check": "^4.4.6",
         "typescript": "^6.0.2",
