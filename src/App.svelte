@@ -310,6 +310,7 @@
             csvText = csv;
             fileName = file.name;
             aliasMap = computeAutoMerges(csv);
+            numSlots = slotRange.max;
             dismissedSuggestions = new Set();
             scheduleHasNewResult = false;
             error = "";
