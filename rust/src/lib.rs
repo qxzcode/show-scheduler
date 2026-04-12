@@ -85,7 +85,7 @@ pub fn optimize(routines_json: &str, num_slots: usize, num_iterations: u32) -> R
     let problem_info = preprocessing::ProblemInfo::new(&routines, num_slots);
     let slots = build_slot_results(&order, &problem_info, &routines);
 
-    let output = OptimizeOutput { slots, score: [score.0, score.1, score.2] };
+    let output = OptimizeOutput { slots, score: [score.num_dist_1, score.num_dist_2, score.intermission_middle_dist] };
     serde_json::to_string(&output).map_err(|e| e.to_string())
 }
 
@@ -109,7 +109,8 @@ pub fn optimize_streaming(routines_json: &str, num_slots: usize, callback: &js_s
 
     optimize::optimize_order_streaming(&routines, num_slots, |order, score| {
         let slots = build_slot_results(order, &problem_info, &routines);
-        let output = OptimizeOutput { slots, score: [score.0, score.1, score.2] };
+        let output =
+            OptimizeOutput { slots, score: [score.num_dist_1, score.num_dist_2, score.intermission_middle_dist] };
         if let Ok(json) = serde_json::to_string(&output) {
             let _ = callback.call1(&JsValue::NULL, &JsValue::from_str(&json));
         }

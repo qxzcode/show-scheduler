@@ -1,6 +1,17 @@
+use std::cmp::Ordering::{Greater, Less};
+
 use crate::{Routine, preprocessing::ProblemInfo, randomize::Randomizer};
 
-pub type Score = (usize, usize, usize); // (num_dist_1, num_dist_2, intermission_middle_dist)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Score {
+    pub num_dist_1: usize,
+    pub num_dist_2: usize,
+    pub intermission_middle_dist: usize,
+}
+
+impl Score {
+    pub const PERFECT: Self = Self { num_dist_1: 0, num_dist_2: 0, intermission_middle_dist: 0 };
+}
 
 /// A candidate solution to the problem.
 struct Solution<'a> {
@@ -15,7 +26,7 @@ impl<'a> Solution<'a> {
     pub fn new(problem_info: &'a ProblemInfo, randomizer: &mut Randomizer<impl rand::Rng>) -> Self {
         let mut order: Box<[usize]> = std::iter::repeat_n(0, problem_info.num_slots()).collect();
         randomizer.randomize_order(&mut order);
-        let mut solution = Self { problem_info, order, intermission_index: 0, score: (0, 0, 0) };
+        let mut solution = Self { problem_info, order, intermission_index: 0, score: Score::PERFECT };
         solution.randomize(randomizer);
         solution
     }
@@ -52,8 +63,8 @@ impl<'a> Solution<'a> {
         let old_num_dist_1 = get_num_dist_1(i - 1, i) + get_num_dist_1(j, j + 1);
         let new_num_dist_1 = get_num_dist_1(i - 1, j) + get_num_dist_1(i, j + 1);
 
-        if new_num_dist_1 > old_num_dist_1 {
-            // Can't be an improvement.
+        let mut ord = new_num_dist_1.cmp(&old_num_dist_1);
+        if ord == Greater {
             return false;
         }
 
@@ -67,8 +78,9 @@ impl<'a> Solution<'a> {
         };
         let old_num_dist_2 = get_num_dist_2(i - 2, i - 1, i, i + 1) + get_num_dist_2(j - 1, j, j + 1, j + 2);
         let new_num_dist_2 = get_num_dist_2(i - 2, i - 1, j, j - 1) + get_num_dist_2(i + 1, i, j + 1, j + 2);
-        if new_num_dist_1 >= old_num_dist_1 && new_num_dist_2 > old_num_dist_2 {
-            // Can't be an improvement.
+
+        ord = ord.then(new_num_dist_2.cmp(&old_num_dist_2));
+        if ord == Greater {
             return false;
         }
 
@@ -76,7 +88,6 @@ impl<'a> Solution<'a> {
         let j = j as usize;
 
         // Check if the mutation improves `intermission_middle_dist`.
-        let old_intermission_middle_dist = self.score.2;
         let new_intermission_index = if (i..=j).contains(&self.intermission_index) {
             // Intermission is within the reversed segment.
             i + (j - self.intermission_index)
@@ -85,22 +96,19 @@ impl<'a> Solution<'a> {
         };
         let new_intermission_middle_dist = get_middle_dist(n, new_intermission_index);
 
-        if new_num_dist_1 >= old_num_dist_1
-            && new_num_dist_2 >= old_num_dist_2
-            && new_intermission_middle_dist >= old_intermission_middle_dist
-        {
-            // Not an improvement.
+        ord = ord.then(new_intermission_middle_dist.cmp(&self.score.intermission_middle_dist));
+        if ord != Less {
             return false;
         }
 
         // Perform the reversal and update metadata.
         self.order[i..=j].reverse();
         self.intermission_index = new_intermission_index;
-        self.score = (
-            self.score.0 + new_num_dist_1 - old_num_dist_1,
-            self.score.1 + new_num_dist_2 - old_num_dist_2,
-            new_intermission_middle_dist,
-        );
+        self.score = Score {
+            num_dist_1: self.score.num_dist_1 + new_num_dist_1 - old_num_dist_1,
+            num_dist_2: self.score.num_dist_2 + new_num_dist_2 - old_num_dist_2,
+            intermission_middle_dist: new_intermission_middle_dist,
+        };
         true
     }
 }
@@ -145,7 +153,7 @@ pub fn optimize_order_streaming<F: FnMut(&[usize], Score)>(
     let mut best_order = solution.order.clone();
     on_improvement(&best_order, best_score);
 
-    if best_score == (0, 0, 0) {
+    if best_score == Score::PERFECT {
         return;
     }
 
@@ -161,7 +169,7 @@ pub fn optimize_order_streaming<F: FnMut(&[usize], Score)>(
             on_improvement(&best_order, best_score);
             last_improvement_ms = js_sys::Date::now();
 
-            if best_score == (0, 0, 0) {
+            if best_score == Score::PERFECT {
                 break;
             }
         }
@@ -185,7 +193,7 @@ fn hill_climb_order(problem_info: &ProblemInfo, solution: &mut Solution) -> Scor
                 if solution.reverse_if_improvement(i, j) {
                     debug_assert_eq!(score_order(problem_info, &solution.order), solution.score);
 
-                    if solution.score == (0, 0, 0) {
+                    if solution.score == Score::PERFECT {
                         // Found an optimal solution; no need to continue climbing.
                         return solution.score;
                     }
@@ -225,7 +233,7 @@ fn score_order(problem_info: &ProblemInfo, order: &[usize]) -> Score {
     let intermission_index = problem_info.intermission_index_in_order(order);
     let intermission_middle_dist = get_middle_dist(n, intermission_index);
 
-    (num_dist_1, num_dist_2, intermission_middle_dist)
+    Score { num_dist_1, num_dist_2, intermission_middle_dist }
 }
 
 fn get_middle_dist(n: usize, index: usize) -> usize {
