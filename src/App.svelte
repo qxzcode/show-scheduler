@@ -322,6 +322,10 @@
     function handleAliasMapChange(newMap: Map<string, string>) {
         aliasMap = newMap;
     }
+
+    function handleRegenerate() {
+        if (normalizedCsv.trim()) startOptimizer(normalizedCsv, numSlots, intermissionTolerance);
+    }
 </script>
 
 {#if isMobile}
@@ -369,6 +373,7 @@
                     onFile={loadFile}
                     onDragOver={() => dragOver = true}
                     onDragLeave={() => dragOver = false}
+                    onRegenerate={handleRegenerate}
                 />
             </div>
             <div class="tab-panel" class:tab-hidden={activeTab !== "performers"}>
@@ -406,6 +411,7 @@
             onFile={loadFile}
             onDragOver={() => dragOver = true}
             onDragLeave={() => dragOver = false}
+            onRegenerate={handleRegenerate}
         />
 
         <div class="main-area">

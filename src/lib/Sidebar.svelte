@@ -14,6 +14,7 @@
         onFile: (file: File) => void;
         onDragOver: () => void;
         onDragLeave: () => void;
+        onRegenerate?: () => void;
     }
 
     let {
@@ -31,6 +32,7 @@
         onFile,
         onDragOver,
         onDragLeave,
+        onRegenerate,
     }: Props = $props();
 
     function onFileInput(e: Event) {
@@ -128,16 +130,28 @@
         </section>
     {/if}
 
-    {#if score}
+    {#if fileName}
         <section class="sidebar-section score-section">
             <p class="score-label">Performers in adjacent routines</p>
-            <p class="score-value" class:score-bad={score.d1 > 0}>{score.d1}</p>
-            <p class="score-label">Performers with one-routine turnarounds</p>
-            <p class="score-value" class:score-warn={score.d2 > 0}>{score.d2}</p>
-            <p class="score-label">Intermission distance from center</p>
-            <p class="score-value" class:score-warn={score.mid > intermissionTolerance}>
-                {score.mid === 0 ? "Centered" : `${score.mid} slot${score.mid === 1 ? "" : "s"} off`}
+            <p class="score-value" class:score-bad={score && score.d1 > 0}>
+                {#if score}{score.d1}{:else}<em class="score-pending">working…</em>{/if}
             </p>
+            <p class="score-label">Performers with one-routine turnarounds</p>
+            <p class="score-value" class:score-warn={score && score.d2 > 0}>
+                {#if score}{score.d2}{:else}<em class="score-pending">working…</em>{/if}
+            </p>
+            <p class="score-label">Intermission distance from center</p>
+            <p class="score-value" class:score-warn={score && score.mid > intermissionTolerance}>
+                {#if score}{score.mid === 0 ? "Centered" : `${score.mid} slot${score.mid === 1 ? "" : "s"} off`}{:else}<em class="score-pending">working…</em>{/if}
+            </p>
+        </section>
+    {/if}
+
+    {#if fileName}
+        <section class="sidebar-section">
+            <button class="regen-btn" onclick={onRegenerate}>
+                Generate another schedule
+            </button>
         </section>
     {/if}
 </div>
@@ -314,4 +328,32 @@
 
     .score-value.score-bad { color: var(--color-danger); }
     .score-value.score-warn { color: var(--color-warning); }
+
+    .score-pending {
+        font-style: italic;
+        font-weight: 400;
+        color: var(--color-text-faint);
+    }
+
+    .regen-btn {
+        width: 100%;
+        padding: 0.55rem 1rem;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius-sm);
+        color: var(--color-text);
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
+    }
+
+    .regen-btn:hover:not(:disabled) {
+        background: var(--color-accent-dim);
+        border-color: var(--color-accent);
+    }
+
+    .regen-btn:disabled {
+        opacity: 0.4;
+        cursor: default;
+    }
 </style>
