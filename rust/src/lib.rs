@@ -98,38 +98,6 @@ pub fn parse_csv(csv: &str) -> Result<String, String> {
     serde_json::to_string(&routines).map_err(|e| e.to_string())
 }
 
-/// Run the local-search show scheduler optimizer.
-///
-/// - `routines_json`: JSON array of `{name, dancers}` objects, as returned by `parse_csv`.
-/// - `num_slots`: total number of time slots (including intermission).
-/// - `intermission_tolerance`: how many slots away from center intermission may be before penalizing.
-/// - `constraints_json`: JSON array of constraint objects (see `ConstraintSpec`). Pass `"[]"` for none.
-/// - `num_iterations`: number of random-restart hill-climb iterations.
-///
-/// Returns JSON: `{ slots: [{slot_number, routines, dist1_conflicts, dist2_conflicts}], score: [d1, d2, mid] }`.
-#[wasm_bindgen]
-pub fn optimize(
-    routines_json: &str,
-    num_slots: usize,
-    intermission_tolerance: usize,
-    constraints_json: &str,
-    num_iterations: u32,
-) -> Result<String, String> {
-    let routines: Vec<Routine> = serde_json::from_str(routines_json).map_err(|e| e.to_string())?;
-    let constraints: Vec<ConstraintSpec> = serde_json::from_str(constraints_json).map_err(|e| e.to_string())?;
-
-    if !routines.iter().any(|r| r.name == "[Intermission]") {
-        return Err("routines must include an '[Intermission]' entry (call parse_csv to generate it)".into());
-    }
-
-    let problem_info = preprocessing::ProblemInfo::new(&routines, num_slots, intermission_tolerance, &constraints)?;
-    let (order, score) = optimize::optimize_order(&problem_info, num_iterations);
-    let slots = build_slot_results(&order, &problem_info, &routines);
-
-    let output = OptimizeOutput { slots, score: [score.num_dist_1, score.num_dist_2, score.intermission_middle_dist] };
-    serde_json::to_string(&output).map_err(|e| e.to_string())
-}
-
 /// Run the show scheduler optimizer continuously, calling `callback` with a JSON result
 /// each time a better solution is found.
 ///

@@ -181,25 +181,6 @@ impl<'a> Solution<'a> {
     }
 }
 
-pub fn optimize_order(problem_info: &ProblemInfo, num_iterations: u32) -> (Box<[usize]>, Score) {
-    let mut randomizer = Randomizer::new(problem_info, rand::rng());
-
-    let mut solution = Solution::new(problem_info, &mut randomizer);
-    let mut best_order = solution.order.clone();
-    let mut best_score = solution.score;
-
-    for _ in 0..num_iterations {
-        solution.randomize(&mut randomizer);
-        let score = hill_climb_order(problem_info, &mut solution);
-        if score < best_score {
-            best_score = score;
-            best_order.clone_from(&solution.order);
-        }
-    }
-
-    (best_order, best_score)
-}
-
 /// Runs iterations indefinitely, calling `on_improvement` each time a better solution is found.
 /// Stops when no improvement has been found for `NO_IMPROVEMENT_TIMEOUT_MS` milliseconds,
 /// or immediately when an optimal score is reached.
