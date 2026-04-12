@@ -7,12 +7,14 @@
         /** Alias map: alias → canonical name. Canonical names are not in this map as keys. */
         aliasMap: Map<string, string>;
         dismissedSuggestions: Set<string>;
+        /** When true (e.g. demo data), duplicate-name suggestions are suppressed */
+        isDemo?: boolean;
         onAliasMapChange: (map: Map<string, string>) => void;
         onDismissedChange: (set: Set<string>) => void;
         onGoToSchedule: () => void;
     }
 
-    let { performerRoutines, aliasMap, dismissedSuggestions, onAliasMapChange, onDismissedChange, onGoToSchedule }: Props = $props();
+    let { performerRoutines, aliasMap, dismissedSuggestions, isDemo = false, onAliasMapChange, onDismissedChange, onGoToSchedule }: Props = $props();
 
     // Build routine-count map for similarity computation (count only non-aliased or canonical)
     let routineCounts = $derived(
@@ -123,7 +125,7 @@
 
 <div class="performers-tab">
 
-    {#if visibleSuggestions.length > 0}
+    {#if !isDemo && visibleSuggestions.length > 0}
         <section class="suggestions-section">
             <h2 class="section-title">
                 <span class="badge">{visibleSuggestions.length}</span>
@@ -164,7 +166,7 @@
         </section>
     {/if}
 
-    {#if visibleSuggestions.length === 0}
+    {#if isDemo || visibleSuggestions.length === 0}
         <div class="schedule-nudge">
             Once you've verified that all the performer names below refer to unique people,
             <button class="nudge-btn" onclick={onGoToSchedule}>go to the optimized schedule →</button>

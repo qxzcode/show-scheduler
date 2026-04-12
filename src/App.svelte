@@ -26,6 +26,7 @@
     // ── File / input state ────────────────────────────────────────────────────
     let csvText = $state("");
     let fileName = $state("");
+    let isDemo = $state(false);
     let numSlots = $state(32);
     let intermissionTolerance = $state(2);
     let dragOver = $state(false);
@@ -340,6 +341,25 @@
     }
 
     // ── File loading ──────────────────────────────────────────────────────────
+    async function handleLoadDemo() {
+        const res = await fetch(`${import.meta.env.BASE_URL}demo-routines.csv`);
+        const csv = await res.text();
+        loadCsv(csv, "demo-routines.csv", true);
+    }
+
+    function loadCsv(csv: string, name: string, demo = false) {
+        csvText = csv;
+        fileName = name;
+        isDemo = demo;
+        aliasMap = computeAutoMerges(csv);
+        numSlots = slotRange.max;
+        dismissedSuggestions = new Set();
+        customConstraints = [];
+        scheduleHasNewResult = false;
+        error = "";
+        activeTab = "performers";
+    }
+
     function loadFile(file: File) {
         if (
             !file.name.endsWith(".csv") &&
@@ -351,16 +371,7 @@
         }
         const reader = new FileReader();
         reader.onload = (e) => {
-            const csv = (e.target?.result as string) ?? "";
-            csvText = csv;
-            fileName = file.name;
-            aliasMap = computeAutoMerges(csv);
-            numSlots = slotRange.max;
-            dismissedSuggestions = new Set();
-            customConstraints = [];
-            scheduleHasNewResult = false;
-            error = "";
-            activeTab = "performers";
+            loadCsv((e.target?.result as string) ?? "", file.name, false);
         };
         reader.readAsText(file);
     }
@@ -424,6 +435,7 @@
                     {customConstraints}
                     {constraintSatisfied}
                     onFile={loadFile}
+                    onLoadDemo={handleLoadDemo}
                     onDragOver={() => dragOver = true}
                     onDragLeave={() => dragOver = false}
                     onRegenerate={handleRegenerate}
@@ -436,6 +448,7 @@
                         {performerRoutines}
                         {aliasMap}
                         {dismissedSuggestions}
+                        {isDemo}
                         onAliasMapChange={handleAliasMapChange}
                         onDismissedChange={(s) => dismissedSuggestions = s}
                         onGoToSchedule={() => { activeTab = "schedule"; scheduleHasNewResult = false; }}
@@ -466,6 +479,7 @@
             {customConstraints}
             {constraintSatisfied}
             onFile={loadFile}
+            onLoadDemo={handleLoadDemo}
             onDragOver={() => dragOver = true}
             onDragLeave={() => dragOver = false}
             onRegenerate={handleRegenerate}
@@ -500,6 +514,7 @@
                             {performerRoutines}
                             {aliasMap}
                             {dismissedSuggestions}
+                            {isDemo}
                             onAliasMapChange={handleAliasMapChange}
                             onDismissedChange={(s) => dismissedSuggestions = s}
                             onGoToSchedule={() => { activeTab = "schedule"; scheduleHasNewResult = false; }}

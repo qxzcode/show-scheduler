@@ -17,6 +17,7 @@
         customConstraints: CustomConstraint[];
         constraintSatisfied: (boolean | null)[];
         onFile: (file: File) => void;
+        onLoadDemo?: () => void;
         onDragOver: () => void;
         onDragLeave: () => void;
         onRegenerate?: () => void;
@@ -39,6 +40,7 @@
         customConstraints,
         constraintSatisfied,
         onFile,
+        onLoadDemo,
         onDragOver,
         onDragLeave,
         onRegenerate,
@@ -117,6 +119,9 @@
             {/if}
         </div>
         <input id="csv-file-input" type="file" accept=".csv,text/csv,text/plain" style="display:none" onchange={onFileInput} />
+        {#if !fileName && onLoadDemo}
+            <button class="demo-btn" onclick={onLoadDemo}>Try demo data</button>
+        {/if}
         <ul class="csv-hints">
             <li><b>Header row:</b> routine names</li>
             <li><b>Cells below each header:</b> performers in that routine, one per cell</li>
@@ -350,6 +355,25 @@
         border-style: solid;
         border-color: var(--color-accent);
         background: var(--color-accent-dim);
+    }
+
+    .demo-btn {
+        display: block;
+        width: 100%;
+        margin-top: 0.4rem;
+        background: none;
+        border: none;
+        padding: 0;
+        font-size: 0.75rem;
+        color: var(--color-text-faint);
+        cursor: pointer;
+        text-align: center;
+        text-decoration: underline;
+        text-underline-offset: 0.15em;
+    }
+
+    .demo-btn:hover {
+        color: var(--color-accent-light);
     }
 
     .file-name {
